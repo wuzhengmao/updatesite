@@ -265,6 +265,8 @@ type siteInfo struct {
 	Title         string
 	Subtitle      string
 	Version       string
+	Commit        string
+	BuiltAt       string
 	BaseURL       string
 	Year          int
 	Stats         index.Stats
@@ -278,12 +280,41 @@ func (s *Server) site() siteInfo {
 		Title:         s.cfg.SiteTitle,
 		Subtitle:      s.cfg.SiteSubtitle,
 		Version:       buildinfo.Version,
+		Commit:        formatBuildCommit(buildinfo.Commit),
+		BuiltAt:       formatBuildTime(buildinfo.Date),
 		BaseURL:       s.cfg.BaseURL,
 		Year:          time.Now().Year(),
 		Stats:         st,
 		AppsCount:     len(s.idx.Current().PublicApps()),
 		UploadEnabled: s.cfg.UploadEnabled,
 	}
+}
+
+// formatBuildCommit drops the placeholder commit so the footer shows just the
+// version rather than "dev+none".
+func formatBuildCommit(raw string) string {
+	switch strings.TrimSpace(raw) {
+	case "", "none", "unknown":
+		return ""
+	}
+	return strings.TrimSpace(raw)
+}
+
+// formatBuildTime turns the link-time stamp into something readable. The value
+// is whatever -ldflags supplied, so an unparseable one is shown as is and a
+// placeholder is dropped entirely.
+func formatBuildTime(raw string) string {
+	raw = strings.TrimSpace(raw)
+	switch raw {
+	case "", "unknown", "none":
+		return ""
+	}
+	for _, layout := range []string{time.RFC3339, "2006-01-02T15:04:05", "2006-01-02"} {
+		if t, err := time.Parse(layout, raw); err == nil {
+			return t.UTC().Format("2006-01-02 15:04 MST")
+		}
+	}
+	return raw
 }
 
 // render executes a template and reports failures as a plain 500.

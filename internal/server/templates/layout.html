@@ -33,7 +33,7 @@
     <span class="sep">|</span>
     <span>更新于 {{date .Site.Stats.ScanAt}}</span>
     <span class="sep">|</span>
-    <span class="mono">v{{.Site.Version}}</span>
+    <span class="mono">{{.Site.Version}}{{if .Site.Commit}}+{{.Site.Commit}}{{end}}{{if .Site.BuiltAt}} · {{.Site.BuiltAt}}{{end}}</span>
   </div>
 </footer>
 <script src="/static/app.js" defer></script>
