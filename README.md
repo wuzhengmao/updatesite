@@ -240,6 +240,7 @@ curl -k "https://localhost:8443/api/v1/apps/myapp/check?version=1.0.0&os=windows
 
 | 变量 | 默认 | 说明 |
 | --- | --- | --- |
+| `TZ` | 不设则 UTC（compose 里为 `Asia/Shanghai`） | 站点显示时间用的时区，任意 IANA 名称 |
 | `ADDR` | `:8080`（容器内 `:80`） | HTTP 监听地址 |
 | `DATA_DIR` | `/data` | 归档根目录，其下的 `apps/` 存放应用 |
 | `CACHE_DIR` | `/var/cache/updatesite` | 校验和缓存位置 |
@@ -325,7 +326,27 @@ docker buildx build --platform linux/amd64,linux/arm64 \
 ```
 
 `scripts/build.sh` 会把版本号、commit、构建时间通过 `-ldflags` 注入，
-显示在站点页脚（形如 `0.1.0+d0651d4 · 2026-10-03 05:24 UTC`）和 `/api/v1/health` 里。
+显示在站点页脚和 `/api/v1/health` 里：
+
+```
+0.1.0+d0651d4 · 2026-10-03 13:32 +08:00
+```
+
+构建戳以 UTC 存储（便于比较），显示时按 `TZ` 转成当地时间，偏移用数字形式而非
+`CST` 这类缩写 —— 单看 `CST` 无法区分中国标准时间、美国中部时间和古巴标准时间。
+时区库已嵌入二进制，所以 `scratch` 镜像里不装 tzdata 也能用。
+
+### 本地改完代码后重建
+
+```bash
+./scripts/dev-rebuild.sh
+```
+
+它会用 `.env` 里的版本戳构建镜像、强制重建容器、等健康检查通过。
+脚本内部刻意用 `docker build` 而不是 `docker compose build`：Docker Desktop 有时
+会把默认 buildx builder 换成 `docker-container` 驱动的（名字是随机两个单词），
+那种 builder 构建的镜像不进本地镜像库，compose 会认为无变化而**继续跑旧镜像**，
+站点静默地提供过期版本。
 
 ---
 
