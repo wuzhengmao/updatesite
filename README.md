@@ -247,7 +247,7 @@ curl -k "https://localhost:8443/api/v1/apps/myapp/check?version=1.0.0&os=windows
 | `SCAN_INTERVAL` | `15s` | 扫描周期 |
 | `SITE_TITLE` | `软件更新中心` | 站点标题 |
 | `SITE_SUBTITLE` | — | 站点副标题 |
-| `BASE_URL` | 自动推断 | API 返回的绝对地址前缀，反代或非标准端口时**必须显式设置** |
+| `BASE_URL` | 空（从请求推断） | API 返回的绝对地址前缀。**反代场景留空即可**，站点会读 `X-Forwarded-Proto` / `X-Forwarded-Host`；容器被直接访问且端口与监听端口不一致时才需要设置 |
 | `CORS_ORIGIN` | `*` | API 的 `Access-Control-Allow-Origin` |
 | `RESCAN_TOKEN` | — | 设置后 `POST /api/v1/rescan` 需要 Bearer 令牌 |
 | `LOG_REQUESTS` | `true` | 是否打印访问日志 |
@@ -304,9 +304,24 @@ location / {
 }
 ```
 
+反代场景**不需要设置 `BASE_URL`**：站点会读 `X-Forwarded-Proto` 与
+`X-Forwarded-Host` 拼出外部地址，换域名时无需改动。上面那段 nginx 配置已经带了
+这两个头。
+
 **注意**：compose 默认 `TLS_REDIRECT=true`，反代如果直接打 HTTP 端口会收到 301
 死循环。交给网关终止 TLS 时，请先把 `TLS_REDIRECT` 改回 `"false"` 并去掉
-443 的映射，再设置 `BASE_URL=https://update.example.com`。
+443 的映射。
+
+### 排查绝对地址不对
+
+API 返回的 `url` / `pageUrl` 指向了错误的主机（比如 `localhost`），按这个顺序查：
+
+1. 看容器启动日志，会打印一行 `absolute URLs are built from BASE_URL=...`
+   或 `absolute URLs follow X-Forwarded-Proto/Host`
+2. 如果打印的是 `BASE_URL=...`，说明它被设上了。反代场景应当留空 ——
+   检查 `.env` 里有没有残留的 `BASE_URL`
+3. 如果走的是请求头推断，确认代理确实传了
+   `X-Forwarded-Proto` 与 `X-Forwarded-Host`
 
 ---
 

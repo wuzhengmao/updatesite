@@ -102,6 +102,13 @@ func serve() {
 	listen(httpSrv, false)
 	log.Printf("listening on %s (data %s, cache %s, rescan every %s, upload %v)",
 		cfg.Addr, cfg.DataDir, cfg.CacheDir, cfg.ScanInterval, cfg.UploadEnabled)
+	// Say where absolute URLs come from. A BASE_URL left over from a local test
+	// is otherwise invisible until someone notices the links are wrong.
+	if cfg.BaseURL != "" {
+		log.Printf("absolute URLs are built from BASE_URL=%s", cfg.BaseURL)
+	} else {
+		log.Printf("absolute URLs follow X-Forwarded-Proto/Host, or the request host when absent")
+	}
 
 	if tlsPair != nil {
 		tlsSrv := newHTTPServer(cfg.TLSAddr, srv.Handler())

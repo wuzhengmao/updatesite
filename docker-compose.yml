@@ -25,10 +25,12 @@ services:
       # on the site. The time zone database is embedded in the binary, so any
       # IANA name works. Defaults to UTC when unset.
       TZ: "Asia/Shanghai"
-      # The address visitors actually use. It is what API responses and the
-      # HTTP-to-HTTPS redirect point at, so it must match the host ports below:
-      # a container cannot see how its ports were mapped.
-      BASE_URL: "https://localhost:8443"
+      # The address visitors actually use, e.g. https://update.example.com.
+      # Leave it empty when a reverse proxy forwards X-Forwarded-Proto and
+      # X-Forwarded-Host; the site then derives the address from the request.
+      # Set it when the container is reached directly on a non-standard port
+      # (see .env.example) — a container cannot see how its ports were mapped.
+      BASE_URL: "${BASE_URL:-}"
       # Set a token to protect POST /api/v1/rescan.
       # RESCAN_TOKEN: "change-me"
       SCAN_INTERVAL: "15s"
