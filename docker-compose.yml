@@ -21,7 +21,9 @@ services:
     environment:
       SITE_TITLE: "软件更新中心"
       # SITE_SUBTITLE: "内部发布通道"
-      # Absolute URL used in API responses behind a reverse proxy.
+      # The address visitors actually use. It is what API responses and the
+      # HTTP-to-HTTPS redirect point at, so it must match the host ports below:
+      # a container cannot see how its ports were mapped.
       BASE_URL: "https://localhost:8443"
       # Set a token to protect POST /api/v1/rescan.
       # RESCAN_TOKEN: "change-me"
@@ -41,9 +43,6 @@ services:
       # Send plain HTTP visitors to HTTPS. /api/v1/health is exempt so the
       # container health probe keeps working.
       TLS_REDIRECT: "true"
-      # Absolute URL used in API responses. Set it to your real address so
-      # links are correct behind a proxy or on a non standard port.
-      BASE_URL: "https://localhost:8443"
 
     volumes:
       # The archive. Publish either by dropping <app-id>/<version>/ directories
