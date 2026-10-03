@@ -1,0 +1,11 @@
+{
+  "name": "演示桌面客户端",
+  "summary": "用来展示发布目录结构的示例应用，安装包都是占位文件。",
+  "description": "这是 **示例应用**，用于演示更新站点的目录结构与元数据格式。\n\n- 支持 Windows / Linux / macOS\n- 版本目录名就是版本号\n- 文件名里的 `windows`、`x64` 会被自动识别",
+  "homepage": "https://example.com/demo",
+  "vendor": "MTI",
+  "license": "Proprietary",
+  "tags": ["desktop", "demo"],
+  "channel": "stable",
+  "order": 10
+}

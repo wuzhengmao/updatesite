@@ -1,0 +1,42 @@
+services:
+  updatesite:
+    build:
+      context: .
+      # Stamp the build so the footer and /api/v1/health report which image is
+      # deployed: VERSION=1.2.0 docker compose up -d --build
+      args:
+        VERSION: ${VERSION:-dev}
+        COMMIT: ${COMMIT:-none}
+        BUILD_DATE: ${BUILD_DATE:-unknown}
+    image: mti/updatesite:latest
+    container_name: updatesite
+    restart: unless-stopped
+
+    ports:
+      - "8080:8080"
+
+    environment:
+      SITE_TITLE: "软件更新中心"
+      # SITE_SUBTITLE: "内部发布通道"
+      # Absolute URL used in API responses behind a reverse proxy.
+      # BASE_URL: "https://update.example.com"
+      # Set a token to protect POST /api/v1/rescan.
+      # RESCAN_TOKEN: "change-me"
+      SCAN_INTERVAL: "15s"
+      # CORS_ORIGIN: "*"
+
+    volumes:
+      # The archive. Publish by dropping <app-id>/<version>/ directories in here.
+      # Keep it read-only unless you want the container to be able to write.
+      # Point this at your own path in production, for example
+      # /srv/updates/apps:/data/apps:ro
+      - ./release/apps:/data/apps:ro
+      # Persists computed sha256 digests across restarts.
+      - updatesite-cache:/var/cache/updatesite
+
+    # The container runs as root so that archives with restrictive permissions
+    # mount without surprises. The image has no shell and the archive is mounted
+    # read-only; add `user: "65534:65534"` here to drop privileges anyway.
+
+volumes:
+  updatesite-cache:

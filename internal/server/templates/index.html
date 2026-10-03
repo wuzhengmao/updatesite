@@ -1,0 +1,36 @@
+{{define "index"}}{{template "head" .}}
+<div class="page-head">
+  <h1>应用列表</h1>
+  <p class="muted">共 {{len .Apps}} 个应用，点击查看版本与安装包。</p>
+</div>
+
+{{if .Apps}}
+<div class="grid">
+  {{range .Apps}}
+  <a class="card" href="/a/{{.ID}}">
+    <div class="card-head">
+      {{if .IconURL}}<img class="icon" src="{{.IconURL}}" alt="" loading="lazy">
+      {{else}}<span class="icon icon-fallback">{{initial .Name}}</span>{{end}}
+      <div class="card-title">
+        <h2>{{.Name}}</h2>
+        {{if .Summary}}<p class="muted clamp-2">{{.Summary}}</p>{{end}}
+      </div>
+    </div>
+    <div class="card-foot">
+      <span class="version">{{with index .Latest .Channel}}{{.}}{{else}}—{{end}}</span>
+      <span class="grow"></span>
+      {{range .Platforms}}<span class="chip chip-sm">{{osLabel .}}</span>{{end}}
+    </div>
+    <div class="card-meta muted">
+      {{.ReleaseCount}} 个版本 · 最近更新 {{ago .UpdatedAt}}
+    </div>
+  </a>
+  {{end}}
+</div>
+{{else}}
+<div class="empty">
+  <p>还没有任何应用。</p>
+  <p class="muted">把安装包放到数据目录的 <code>apps/&lt;应用ID&gt;/&lt;版本号&gt;/</code> 下即可自动发布。</p>
+</div>
+{{end}}
+{{template "foot" .}}{{end}}

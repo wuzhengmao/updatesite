@@ -1,0 +1,56 @@
+# syntax=docker/dockerfile:1
+
+# ---------------------------------------------------------------- build stage
+# The binary is cross-compiled on the build host, so a single `docker buildx
+# build --platform linux/amd64,linux/arm64` produces both architectures without
+# emulation. The project has no third-party dependencies, so there is no module
+# download step and the build works offline.
+FROM --platform=$BUILDPLATFORM golang:1.24-alpine AS build
+
+ARG TARGETOS
+ARG TARGETARCH
+ARG VERSION=dev
+ARG COMMIT=none
+ARG BUILD_DATE=unknown
+
+WORKDIR /src
+
+COPY go.mod ./
+COPY cmd/ ./cmd/
+COPY internal/ ./internal/
+
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
+    go build -trimpath -tags netgo,osusergo \
+        -ldflags "-s -w \
+            -X github.com/mti/updatesite/internal/buildinfo.Version=$VERSION \
+            -X github.com/mti/updatesite/internal/buildinfo.Commit=$COMMIT \
+            -X github.com/mti/updatesite/internal/buildinfo.Date=$BUILD_DATE" \
+        -o /out/updatesite ./cmd/updatesite
+
+# The checksum cache directory ships with the image so that a named volume
+# mounted over it inherits the right ownership.
+RUN mkdir -p /out/cache
+
+# ---------------------------------------------------------------- final image
+# scratch keeps the image around 10 MB and removes any shell or package manager
+# from the attack surface.
+FROM scratch
+
+COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+COPY --from=build /out/updatesite /updatesite
+COPY --from=build /out/cache /var/cache/updatesite
+
+ENV DATA_DIR=/data \
+    CACHE_DIR=/var/cache/updatesite \
+    ADDR=:8080 \
+    SCAN_INTERVAL=15s
+
+EXPOSE 8080
+VOLUME ["/data"]
+
+# The image has no shell or curl, so the binary probes itself.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+    CMD ["/updatesite", "-healthcheck"]
+
+ENTRYPOINT ["/updatesite"]

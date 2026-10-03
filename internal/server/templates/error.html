@@ -1,0 +1,7 @@
+{{define "error"}}{{template "head" .}}
+<div class="error-page">
+  <p class="error-code">{{.ErrorCode}}</p>
+  <p class="error-text">{{.ErrorText}}</p>
+  <p><a class="btn" href="/">返回应用列表</a></p>
+</div>
+{{template "foot" .}}{{end}}

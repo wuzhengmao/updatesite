@@ -1,0 +1,102 @@
+{{define "app"}}{{template "head" .}}
+<nav class="crumbs">
+  <a href="/">应用列表</a><span class="sep">/</span><span>{{.App.Name}}</span>
+</nav>
+
+<section class="app-head">
+  {{if .App.IconURL}}<img class="icon icon-lg" src="{{.App.IconURL}}" alt="">
+  {{else}}<span class="icon icon-lg icon-fallback">{{initial .App.Name}}</span>{{end}}
+  <div class="app-head-main">
+    <h1>{{.App.Name}}</h1>
+    {{if .App.Summary}}<p class="muted">{{.App.Summary}}</p>{{end}}
+    <div class="app-meta">
+      {{if .App.Vendor}}<span>{{.App.Vendor}}</span>{{end}}
+      {{if .App.License}}<span>{{.App.License}}</span>{{end}}
+      {{range .App.Tags}}<span class="chip chip-sm">{{.}}</span>{{end}}
+      {{if .App.Homepage}}<a class="chip chip-sm" href="{{.App.Homepage}}" rel="noopener noreferrer">官网</a>{{end}}
+      <span class="muted">最近更新 {{ago .App.UpdatedAt}}</span>
+    </div>
+  </div>
+</section>
+
+<section class="versions">
+  <a class="chip {{if .IsLatest}}chip-active{{end}}" href="/a/{{.App.ID}}">最新</a>
+  {{range .App.Releases}}
+  <a class="chip {{if and $.Release (eq .Version $.Release.Version)}}chip-active{{end}}"
+     href="/a/{{$.App.ID}}/{{.Version}}">{{.Version}}{{if .Prerelease}}<span class="pre">pre</span>{{end}}</a>
+  {{end}}
+</section>
+
+{{if .Release}}
+<section class="panel">
+  <header class="panel-head">
+    <h2>{{.Release.Version}}{{if .Release.Title}}<span class="panel-sub"> · {{.Release.Title}}</span>{{end}}</h2>
+    <div class="badges">
+      <span class="badge">{{.Release.Channel}}</span>
+      {{if .Release.Prerelease}}<span class="badge badge-warn">预发布</span>{{end}}
+      {{if .Release.Mandatory}}<span class="badge badge-danger">强制更新</span>{{end}}
+      <span class="badge">{{date .Release.PublishedAt}}</span>
+    </div>
+  </header>
+
+  <div class="table-scroll">
+  <table class="files">
+    <thead>
+      <tr><th>平台</th><th>类型</th><th>文件</th><th class="num">大小</th><th>SHA-256</th><th></th></tr>
+    </thead>
+    <tbody>
+      {{range .Release.Artifacts}}
+      <tr>
+        <td class="nowrap"><span class="os">{{osLabel .OS}}</span> <span class="muted">{{archLabel .Arch}}</span></td>
+        <td class="nowrap">{{kindLabel .Kind}}</td>
+        <td class="file">
+          {{if .Path}}<a href="{{.Path}}" title="{{.File}}">{{.Name}}</a>
+          {{else if .External}}<a href="{{.External}}" rel="noopener noreferrer">{{.Name}}</a>
+          {{else}}<span class="muted" title="{{.File}}">{{.Name}}（文件缺失）</span>{{end}}
+          {{if .External}}<span class="tag">外部</span>{{end}}
+          {{if not .Detected}}<span class="tag">已声明</span>{{end}}
+        </td>
+        <td class="num nowrap">{{size .Size}}</td>
+        <td class="sha">
+          {{if .SHA256}}<code class="copy" data-copy="{{.SHA256}}" title="{{.SHA256}}">{{shortsha .SHA256}}…</code>
+          {{else}}<span class="muted">未计算</span>{{end}}
+        </td>
+        <td class="actions">
+          {{if .Path}}<a class="btn btn-sm" href="{{.Path}}">下载</a>
+          {{else if .External}}<a class="btn btn-sm" href="{{.External}}" rel="noopener noreferrer">下载</a>{{end}}
+        </td>
+      </tr>
+      {{else}}
+      <tr><td colspan="6" class="muted">这个版本没有可下载的文件。</td></tr>
+      {{end}}
+    </tbody>
+  </table>
+  </div>
+</section>
+
+{{if .Release.Notes}}
+<section class="panel">
+  <h2>更新说明</h2>
+  <div class="markdown">{{.Notes}}</div>
+</section>
+{{end}}
+
+<section class="panel">
+  <h2>API</h2>
+  <ul class="api-list">
+    <li><code>GET /api/v1/apps/{{.App.ID}}/latest</code><span class="muted">最新版本</span></li>
+    <li><code>GET /api/v1/apps/{{.App.ID}}/latest?os=windows&amp;arch=x64</code><span class="muted">指定平台</span></li>
+    <li><code>GET /api/v1/apps/{{.App.ID}}/check?version=1.0.0&amp;os=windows&amp;arch=x64</code><span class="muted">检查更新</span></li>
+  </ul>
+</section>
+{{else}}
+<div class="empty"><p>这个应用还没有发布任何版本。</p></div>
+{{end}}
+
+{{if .App.Description}}
+<section class="panel">
+  <h2>关于</h2>
+  <div class="markdown">{{.About}}</div>
+</section>
+{{end}}
+{{template "foot" .}}{{end}}

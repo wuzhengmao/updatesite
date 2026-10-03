@@ -1,0 +1,19 @@
+# Build output
+/updatesite
+/updatesite.exe
+/dist/
+/build/
+
+# Local scratch data
+/data/
+/cache/
+
+# release/apps is the default archive mount point and ships with placeholder
+# demo files. If you keep real installers there, uncomment the next line.
+# /release/apps/
+
+# Editor
+.vscode/
+.idea/
+*.swp
+.DS_Store

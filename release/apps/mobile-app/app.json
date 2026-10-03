@@ -1,0 +1,7 @@
+{
+  "name": "演示移动端",
+  "summary": "移动端示例应用，展示 Android / iOS 安装包的归档方式。",
+  "vendor": "MTI",
+  "tags": ["mobile", "demo"],
+  "order": 20
+}

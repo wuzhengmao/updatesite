@@ -1,0 +1,41 @@
+{{define "head"}}<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Title}} · {{.Site.Title}}</title>
+<meta name="color-scheme" content="light dark">
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="wrap topbar-inner">
+    <a class="brand" href="/">
+      <svg class="brand-mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m0 0 4.5-4.5M12 14l-4.5-4.5M4 18.5h16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span class="brand-name">{{.Site.Title}}</span>
+    </a>
+    {{if .Site.Subtitle}}<span class="brand-sub">{{.Site.Subtitle}}</span>{{end}}
+    <nav class="topnav">
+      <a href="/api/v1/apps">JSON API</a>
+    </nav>
+  </div>
+</header>
+<main class="wrap">
+{{end}}
+
+{{define "foot"}}
+</main>
+<footer class="footer">
+  <div class="wrap footer-inner">
+    <span>{{.Site.Stats.Apps}} 个应用 · {{.Site.Stats.Releases}} 个版本 · {{.Site.Stats.Artifacts}} 个文件</span>
+    <span class="sep">|</span>
+    <span>更新于 {{date .Site.Stats.ScanAt}}</span>
+    <span class="sep">|</span>
+    <span class="mono">v{{.Site.Version}}</span>
+  </div>
+</footer>
+<script src="/static/app.js" defer></script>
+</body>
+</html>
+{{end}}

@@ -1,0 +1,23 @@
+{
+  "channel": "stable",
+  "title": "体验优化版",
+  "publishedAt": "2026-09-20T09:30:00+08:00",
+  "mandatory": true,
+  "minVersion": "1.0.0",
+  "artifacts": [
+    {
+      "file": "DemoDesktop-1.2.0-windows-x64.exe",
+      "name": "Windows 64 位安装程序",
+      "kind": "installer",
+      "os": "windows",
+      "arch": "x64"
+    },
+    {
+      "file": "DemoDesktop-1.2.0-macos-universal.dmg",
+      "name": "macOS 通用磁盘映像",
+      "kind": "installer",
+      "os": "macos",
+      "arch": "universal"
+    }
+  ]
+}
