@@ -35,26 +35,43 @@ const usageText = `updatesite - 应用更新站点
 
 用法:
   updatesite                     启动站点
+  updatesite serve               同上
   updatesite token <应用ID>      打印该应用的上传令牌
+  updatesite token -gen-secret   生成一个新的 UPLOAD_SECRET
   updatesite token --list        列出归档目录里所有应用的令牌
   updatesite -healthcheck        探测本机站点是否存活（退出码 0/1）
   updatesite help                显示本帮助
 
+在容器里运行时，镜像的 ENTRYPOINT 已经是本程序，不要再写一遍程序名：
+
+  docker run --rm <镜像> token -gen-secret      # 对
+  docker run --rm <镜像> updatesite token ...   # 错，会变成给程序传一个参数
+
 环境变量见 README。`
 
 func main() {
-	if len(os.Args) > 1 {
-		switch os.Args[1] {
-		case "-healthcheck", "-health", "--healthcheck":
-			os.Exit(healthcheck())
-		case "token":
-			os.Exit(tokenCommand(os.Args[2:]))
-		case "help", "-h", "--help":
-			fmt.Println(usageText)
-			return
-		}
+	args := os.Args[1:]
+	if len(args) == 0 {
+		serve()
+		return
 	}
-	serve()
+
+	switch args[0] {
+	case "-healthcheck", "-health", "--healthcheck":
+		os.Exit(healthcheck())
+	case "token":
+		os.Exit(tokenCommand(args[1:]))
+	case "serve":
+		serve()
+	case "help", "-h", "--help":
+		fmt.Println(usageText)
+	default:
+		// Never fall through to serving: a mistyped subcommand silently
+		// becoming a long running server is baffling to debug, and in a
+		// container it looks like the command simply hung.
+		fmt.Fprintf(os.Stderr, "未知命令 %q\n\n%s\n", args[0], usageText)
+		os.Exit(2)
+	}
 }
 
 func serve() {

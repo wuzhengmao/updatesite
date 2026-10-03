@@ -66,6 +66,111 @@ VERSION=0.3.0-rc1 docker compose up -d --build
 - **提交号**：`COMMIT=$(git rev-parse --short HEAD) docker compose up -d --build`
   可以让页脚显示它；不传就不显示。compose 读不到 shell 变量，所以要像这样内联
 
+### 只拉镜像、不要仓库
+
+镜像里的二进制是自包含的：模板、样式、脚本、文档全部嵌在里面，运行时不需要
+任何仓库文件。以下全程只用 `docker`，不需要 `git clone`。
+
+**1. 建目录，从镜像里生成部署密钥**
+
+```bash
+mkdir -p updatesite/{apps,certs} && cd updatesite
+
+cat > .env <<EOF
+UPLOAD_SECRET=$(docker run --rm wuzm219/updatesite:0.2.0 token -gen-secret -q)
+EOF
+```
+
+> 镜像的 `ENTRYPOINT` 已经是这个程序，所以**不要再写一遍程序名**。
+> `docker run --rm <镜像> token -gen-secret` 是对的；
+> 写成 `docker run --rm <镜像> updatesite token ...` 会多传一个参数，
+> 程序会报「未知命令」并退出——这是刻意设计，免得打错了却静默启动一个服务器。
+
+**2. 写 `docker-compose.yml`**
+
+```yaml
+services:
+  updatesite:
+    image: wuzm219/updatesite:0.2.0
+    container_name: updatesite
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+      - "8443:443"
+    environment:
+      SITE_TITLE: "软件更新中心"
+      TZ: "Asia/Shanghai"
+      UPLOAD_SECRET: "${UPLOAD_SECRET:?请先设置 UPLOAD_SECRET}"
+      TLS_CERT: "/certs/server.crt"
+      TLS_KEY: "/certs/server.key"
+      TLS_REDIRECT: "true"
+    volumes:
+      - ./apps:/data/apps
+      - ./certs:/certs:ro
+      - updatesite-cache:/var/cache/updatesite
+volumes:
+  updatesite-cache:
+```
+
+`apps` 就是归档目录，发布的东西都在里面，换机器拷走即可。
+`updatesite-cache` 只是个命名卷，存 sha256 缓存，删了会重算。
+
+**3. 起服务**
+
+```bash
+docker compose up -d
+```
+
+`certs/` 还是空的话，443 不会启动，站点以纯 HTTP 提供服务并在日志里说明原因 ——
+这是刻意的，证书配错不该让站点整个打不开。日志会打印：
+
+```
+TLS is configured but unusable, serving plain HTTP only: open /certs/server.crt: no such file or directory
+```
+
+**4. 配证书**
+
+用你自己的正式证书（推荐），或者临时生成一张自签的：
+
+```bash
+openssl req -x509 -newkey rsa:2048 -nodes -sha256 -days 825 \
+  -keyout certs/server.key -out certs/server.crt \
+  -subj "//CN=update.example.com" \
+  -addext "subjectAltName=DNS:update.example.com,IP:127.0.0.1"
+
+docker compose up -d --force-recreate
+```
+
+> `//CN=` 里的双斜杠是给 Git Bash 的：MSYS 会把单个前导斜杠当路径转换，
+> 把 `/CN=host` 改写成 `C:/Program Files/Git/CN=host`，openssl 会拒绝。
+> Linux/macOS 上写 `/CN=` 即可。
+
+**5. 验证**
+
+```bash
+docker logs updatesite 2>&1 | grep -i "listen"
+curl -sk https://localhost:8443/api/v1/health
+docker exec updatesite updatesite token <应用ID>       # 拿上传令牌
+```
+
+**升级**：改 `image:` 的 tag 再 `docker compose pull && docker compose up -d --force-recreate`。
+
+**不用 compose 的等价写法**：
+
+```bash
+docker run -d --name updatesite --restart unless-stopped \
+  -p 8080:80 -p 8443:443 \
+  -e UPLOAD_SECRET="$(docker run --rm wuzm219/updatesite:0.2.0 token -gen-secret -q)" \
+  -e TZ=Asia/Shanghai \
+  -e TLS_CERT=/certs/server.crt -e TLS_KEY=/certs/server.key -e TLS_REDIRECT=true \
+  -v "$PWD/apps:/data/apps" -v "$PWD/certs:/certs:ro" \
+  -v updatesite-cache:/var/cache/updatesite \
+  wuzm219/updatesite:0.2.0
+```
+
+（Windows 的 Git Bash 里路径要写成 `"D:/updatesite/apps:/data/apps"` 这种形式，
+并加 `MSYS_NO_PATHCONV=1`，否则容器内路径会被一起转换。）
+
 ### 不使用 Docker
 
 ```bash
