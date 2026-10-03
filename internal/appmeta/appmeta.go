@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/wuzhengmao/updatesite/internal/index"
 )
@@ -300,9 +301,27 @@ func writeFile(appsDir, appID, name string, data []byte) error {
 		os.Remove(tmpName)
 		return err
 	}
-	if err := os.Rename(tmpName, filepath.Join(dir, name)); err != nil {
+	if err := replaceFile(tmpName, filepath.Join(dir, name)); err != nil {
 		os.Remove(tmpName)
 		return err
 	}
 	return nil
+}
+
+// replaceFile renames tmp over target, retrying briefly on failure.
+//
+// Windows refuses the rename while anything holds a handle on the target, which
+// happens in practice: a virus scanner picking up the freshly created temporary
+// file, the search indexer, or the background scanner reading app.json. Those
+// holds last milliseconds, so a short retry turns a spurious failure into a
+// success. The rename stays atomic either way.
+func replaceFile(tmp, target string) error {
+	var err error
+	for attempt := 0; attempt < 6; attempt++ {
+		if err = os.Rename(tmp, target); err == nil {
+			return nil
+		}
+		time.Sleep(time.Duration(10*(attempt+1)) * time.Millisecond)
+	}
+	return err
 }

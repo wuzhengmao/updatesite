@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/wuzhengmao/updatesite/internal/index"
 )
@@ -239,16 +240,16 @@ func swapIntoPlace(root, target string) (replaced bool, err error) {
 	var parked string
 	if _, statErr := os.Stat(target); statErr == nil {
 		parked = filepath.Join(filepath.Dir(target), ".trash-"+randomSuffix())
-		if err := os.Rename(target, parked); err != nil {
+		if err := renameWithRetry(target, parked); err != nil {
 			return false, fmt.Errorf("cannot replace %s: %w", target, err)
 		}
 		replaced = true
 	}
 
-	if err := os.Rename(root, target); err != nil {
+	if err := renameWithRetry(root, target); err != nil {
 		if parked != "" {
 			// Put the previous release back rather than losing it.
-			if restoreErr := os.Rename(parked, target); restoreErr != nil {
+			if restoreErr := renameWithRetry(parked, target); restoreErr != nil {
 				return false, fmt.Errorf("cannot install %s (%v), and the previous release is left at %s",
 					target, err, parked)
 			}
@@ -262,6 +263,23 @@ func swapIntoPlace(root, target string) (replaced bool, err error) {
 		}
 	}
 	return replaced, nil
+}
+
+// renameWithRetry retries a rename briefly.
+//
+// Windows refuses to rename a directory while anything holds a handle inside
+// it, and the background scanner is usually walking the archive at that very
+// moment, hashing files. Those holds last milliseconds, so a short retry turns
+// a spurious failure into a success.
+func renameWithRetry(from, to string) error {
+	var err error
+	for attempt := 0; attempt < 6; attempt++ {
+		if err = os.Rename(from, to); err == nil {
+			return nil
+		}
+		time.Sleep(time.Duration(10*(attempt+1)) * time.Millisecond)
+	}
+	return err
 }
 
 func randomSuffix() string {
