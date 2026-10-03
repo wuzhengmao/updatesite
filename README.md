@@ -6,6 +6,7 @@
 - **发布即拷贝** —— 目录结构本身就是数据库，`cp` 进去就生效，不用登录后台
 - **多产品多平台** —— 每个应用独立 ID，每个版本按 `os` / `arch` 归档安装包
 - **REST API** —— 客户端传当前版本号即可查询是否有新版本、下载哪个包
+- **内置文档** —— 发布规范与 API 说明随二进制一起分发，浏览 `/docs` 即可查看
 - **单二进制** —— Go 标准库实现，零第三方依赖，静态编译
 - **多架构镜像** —— `linux/amd64` 与 `linux/arm64`，基于 `scratch`，镜像约 10 MB
 
@@ -135,8 +136,10 @@ curl "http://localhost:8080/api/v1/apps/myapp/check?version=1.0.0&os=windows&arc
 | `GET /api/v1/apps/{app}/check` | **查更新** |
 | `POST /api/v1/rescan` | 立即重新扫描 |
 | `GET /dl/{app}/{version}/{file}` | 下载；版本可写 `latest`，支持断点续传 |
+| `GET /docs` | 内置文档（发布规范、API 说明） |
 
-完整字段说明见 [API 文档](docs/API.md)。
+完整字段说明见 [API 文档](docs/API.md)，运行时也可以直接在站点上访问
+<http://localhost:8080/docs> 查看同样的内容。
 
 ---
 
@@ -201,8 +204,10 @@ internal/index/        归档扫描、平台识别、校验和缓存、快照发
 internal/server/       HTTP 路由、JSON API、下载、网页与模板
 internal/buildinfo/    构建期注入的版本信息
 scripts/publish.sh     发布脚本
-docs/RELEASE-SPEC.md   发布规范
-docs/API.md            API 文档
+docs/                  文档，同时被嵌入二进制并在 /docs 提供浏览
+├── docs.go            把本目录的 .md 嵌入二进制
+├── RELEASE-SPEC.md    发布规范
+└── API.md             API 文档
 ```
 
 ---

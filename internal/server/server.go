@@ -22,15 +22,18 @@ import (
 //go:embed templates static
 var assets embed.FS
 
-// Server wires the configuration, the index and the templates together.
+// Server wires the configuration, the index, the templates and the embedded
+// documentation together.
 type Server struct {
 	cfg     config.Config
 	idx     *index.Index
 	tmpl    *template.Template
+	docs    []*doc
 	started time.Time
 }
 
-// New builds a server, parsing the embedded templates.
+// New builds a server, parsing the embedded templates and rendering the
+// bundled documentation once at start up.
 func New(cfg config.Config, idx *index.Index) (*Server, error) {
 	s := &Server{cfg: cfg, idx: idx, started: time.Now()}
 	t, err := template.New("").Funcs(templateFuncs()).ParseFS(assets, "templates/*.html")
@@ -38,6 +41,11 @@ func New(cfg config.Config, idx *index.Index) (*Server, error) {
 		return nil, err
 	}
 	s.tmpl = t
+
+	s.docs, err = loadDocs()
+	if err != nil {
+		return nil, err
+	}
 	return s, nil
 }
 
@@ -54,6 +62,13 @@ func (s *Server) routes() *http.ServeMux {
 	mux.HandleFunc("GET /a/{app}", s.handleAppPage)
 	mux.HandleFunc("GET /a/{app}/icon", s.handleIcon)
 	mux.HandleFunc("GET /a/{app}/{version}", s.handleAppPage)
+
+	// Bundled documentation.
+	mux.HandleFunc("GET /docs", s.handleDocs)
+	mux.HandleFunc("GET /docs/{$}", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/docs", http.StatusFound)
+	})
+	mux.HandleFunc("GET /docs/{name}", s.handleDoc)
 
 	// Embedded assets.
 	staticFS, _ := fs.Sub(assets, "static")

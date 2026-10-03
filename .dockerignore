@@ -3,7 +3,6 @@
 .env
 .github
 release
-docs
 scripts
 *.md
 !README.md

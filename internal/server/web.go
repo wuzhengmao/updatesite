@@ -24,6 +24,8 @@ type pageData struct {
 	IsLatest  bool
 	Notes     template.HTML
 	About     template.HTML
+	Docs      []docLink
+	Doc       *doc
 	ErrorCode int
 	ErrorText string
 }

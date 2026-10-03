@@ -8,12 +8,13 @@ import (
 	"strings"
 )
 
-// The changelog renderer intentionally supports only the small Markdown subset
-// that release notes actually use: headings, lists, quotes, fenced code, rules,
-// bold, italic, inline code and links. It is built to be safe by construction:
-// the input is HTML-escaped before any markup is recognised, link targets are
-// scheme-checked, and code spans are pulled out into NUL-delimited placeholders
-// that no escaped text can forge.
+// The Markdown renderer intentionally supports only the subset that release
+// notes and the bundled documentation use: headings, lists, quotes, fenced
+// code, pipe tables, rules, bold, italic, strikethrough, inline code and links.
+//
+// It is built to be safe by construction: the input is HTML-escaped before any
+// markup is recognised, link targets are scheme-checked, and code spans are
+// pulled out into NUL-delimited placeholders that no escaped text can forge.
 
 var (
 	reCodeSpan    = regexp.MustCompile("`([^`\n]+)`")
@@ -28,9 +29,15 @@ var (
 	reRule        = regexp.MustCompile(`^\s*(?:---+|___+|\*\*\*+)\s*$`)
 	reFence       = regexp.MustCompile("^\\s*(?:```|~~~)")
 	rePlaceholder = regexp.MustCompile("\x00(\\d+)\x00")
+
+	// A table delimiter row is dashes with optional ":" alignment markers. The
+	// caller additionally requires a literal "|" in the row, which is what
+	// keeps a bare "---" (a rule, or a setext heading underline) from being
+	// mistaken for a table separator.
+	reTableDelim = regexp.MustCompile(`^\s*\|?\s*:?-+:?\s*(?:\|\s*:?-+:?\s*)*\|?\s*$`)
 )
 
-// RenderMarkdown converts release notes to HTML.
+// RenderMarkdown converts Markdown text to HTML.
 func RenderMarkdown(src string) template.HTML {
 	src = strings.ReplaceAll(src, "\r\n", "\n")
 	src = strings.ReplaceAll(src, "\r", "\n")
@@ -77,7 +84,8 @@ func RenderMarkdown(src string) template.HTML {
 		flushList()
 	}
 
-	for _, raw := range lines {
+	for i := 0; i < len(lines); i++ {
+		raw := lines[i]
 		line := strings.TrimRight(raw, " \t")
 
 		if inCode {
@@ -108,6 +116,11 @@ func RenderMarkdown(src string) template.HTML {
 			flushAll()
 			level := len(m[1])
 			b.WriteString("<h" + strconv.Itoa(level) + ">" + inline(strings.TrimSpace(m[2])) + "</h" + strconv.Itoa(level) + ">\n")
+			continue
+		}
+		if isTableStart(lines, i) {
+			flushAll()
+			i = writeTable(&b, lines, i)
 			continue
 		}
 		if m := reBullet.FindStringSubmatch(line); m != nil {
@@ -144,6 +157,104 @@ func RenderMarkdown(src string) template.HTML {
 	flushAll()
 	return template.HTML(b.String())
 }
+
+// --------------------------------------------------------------- pipe tables
+
+// isTableStart reports whether lines[i] heads a pipe table, which requires a
+// pipe in the header row and a delimiter row directly below it.
+func isTableStart(lines []string, i int) bool {
+	if i+1 >= len(lines) {
+		return false
+	}
+	return strings.Contains(lines[i], "|") &&
+		strings.Contains(lines[i+1], "|") &&
+		reTableDelim.MatchString(lines[i+1])
+}
+
+// writeTable renders a table and returns the index of its last consumed line.
+func writeTable(b *strings.Builder, lines []string, start int) int {
+	head := splitRow(lines[start])
+	aligns := parseAligns(lines[start+1])
+
+	i := start + 2
+	var body [][]string
+	for ; i < len(lines); i++ {
+		line := lines[i]
+		if strings.TrimSpace(line) == "" || !strings.Contains(line, "|") {
+			break
+		}
+		body = append(body, splitRow(line))
+	}
+
+	b.WriteString("<div class=\"table-wrap\"><table>\n<thead><tr>")
+	for c, cell := range head {
+		b.WriteString("<th" + alignAttr(aligns, c) + ">" + inline(cell) + "</th>")
+	}
+	b.WriteString("</tr></thead>\n<tbody>\n")
+	for _, row := range body {
+		b.WriteString("<tr>")
+		for c := range head {
+			cell := ""
+			if c < len(row) {
+				cell = row[c]
+			}
+			b.WriteString("<td" + alignAttr(aligns, c) + ">" + inline(cell) + "</td>")
+		}
+		b.WriteString("</tr>\n")
+	}
+	b.WriteString("</tbody></table></div>\n")
+
+	return i - 1
+}
+
+// splitRow splits a table line into trimmed cells, ignoring the optional
+// leading and trailing pipes.
+func splitRow(line string) []string {
+	line = strings.TrimSpace(line)
+	line = strings.TrimPrefix(line, "|")
+	line = strings.TrimSuffix(line, "|")
+	parts := strings.Split(line, "|")
+	for i := range parts {
+		parts[i] = strings.TrimSpace(parts[i])
+	}
+	return parts
+}
+
+// parseAligns reads the ":" markers of a delimiter row.
+func parseAligns(line string) []string {
+	cells := splitRow(line)
+	out := make([]string, len(cells))
+	for i, c := range cells {
+		left := strings.HasPrefix(c, ":")
+		right := strings.HasSuffix(c, ":")
+		switch {
+		case left && right:
+			out[i] = "center"
+		case right:
+			out[i] = "right"
+		case left:
+			out[i] = "left"
+		}
+	}
+	return out
+}
+
+func alignAttr(aligns []string, col int) string {
+	if col >= len(aligns) {
+		return ""
+	}
+	switch aligns[col] {
+	case "center":
+		return ` style="text-align:center"`
+	case "right":
+		return ` style="text-align:right"`
+	case "left":
+		return ` style="text-align:left"`
+	}
+	return ""
+}
+
+// ------------------------------------------------------------------- inline
 
 // inline renders one line of Markdown. The input is escaped first, so every
 // transformation below operates on text that can no longer break out of HTML.

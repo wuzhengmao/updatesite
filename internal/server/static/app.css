@@ -88,7 +88,7 @@ code, .mono { font-family: var(--mono); font-size: .85em; }
   border-left: 1px solid var(--border); padding-left: .75rem;
 }
 
-.topnav { margin-left: auto; font-size: .875rem; }
+.topnav { margin-left: auto; font-size: .875rem; display: flex; gap: 1rem; }
 
 main { padding: 1.75rem 0 3rem; }
 
@@ -321,6 +321,75 @@ table.files tr:hover td { background: var(--surface-2); }
   border-left: 3px solid var(--border); color: var(--muted);
 }
 .markdown hr { border: 0; border-top: 1px solid var(--border); margin: 1rem 0; }
+.markdown h2 {
+  margin-top: 1.9rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+.markdown h2:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
+
+/* Tables survive narrow screens by scrolling sideways. */
+.markdown .table-wrap { overflow-x: auto; margin: 0 0 .9rem; }
+.markdown table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: .85rem;
+}
+.markdown th,
+.markdown td {
+  border: 1px solid var(--border);
+  padding: .45rem .65rem;
+  vertical-align: top;
+}
+.markdown th {
+  background: var(--surface-2);
+  font-weight: 600;
+  text-align: left;
+  white-space: nowrap;
+}
+
+/* -------------------------------------------------------------------- docs */
+
+.docs {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  gap: 1.25rem;
+  align-items: start;
+}
+
+.docs-nav {
+  position: sticky;
+  top: 72px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: .9rem 1rem;
+}
+.docs-nav-title {
+  margin: 0 0 .5rem;
+  font-size: .72rem;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--muted);
+}
+.docs-nav ul { list-style: none; margin: 0; padding: 0; }
+.docs-nav li { margin: .1rem 0; }
+.docs-nav a {
+  display: block;
+  padding: .3rem .55rem;
+  border-radius: var(--radius-sm);
+  font-size: .875rem;
+  color: var(--text);
+}
+.docs-nav a:hover { background: var(--surface-2); text-decoration: none; }
+.docs-nav a.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+
+.docs-body { padding: 1.5rem 1.75rem; }
+
+@media (max-width: 760px) {
+  .docs { grid-template-columns: 1fr; }
+  .docs-nav { position: static; }
+}
 
 /* ------------------------------------------------------------------- empty */
 

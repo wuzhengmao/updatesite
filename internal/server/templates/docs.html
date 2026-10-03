@@ -1,0 +1,17 @@
+{{define "docs"}}{{template "head" .}}
+<nav class="crumbs">
+  <a href="/">应用列表</a><span class="sep">/</span><span>文档</span><span class="sep">/</span><span>{{.Doc.Title}}</span>
+</nav>
+
+<div class="docs">
+  <aside class="docs-nav">
+    <p class="docs-nav-title">文档</p>
+    <ul>
+      {{range .Docs}}
+      <li><a class="{{if .Active}}active{{end}}" href="/docs/{{.Slug}}">{{.Title}}</a></li>
+      {{end}}
+    </ul>
+  </aside>
+  <article class="panel markdown docs-body">{{.Doc.Body}}</article>
+</div>
+{{template "foot" .}}{{end}}

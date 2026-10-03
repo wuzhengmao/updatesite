@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -383,4 +384,71 @@ func TestRescanEndpoint(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 	t.Error("rescan did not publish the new release")
+}
+
+// getHTML fetches a page and returns its status and body.
+func getHTML(t *testing.T, ts *httptest.Server, path string) (int, string) {
+	t.Helper()
+	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	}}
+	resp, err := client.Get(ts.URL + path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return resp.StatusCode, string(body)
+}
+
+func TestDocsPages(t *testing.T) {
+	ts, _ := newSite(t)
+
+	// /docs serves the first document, which is the release specification.
+	code, html := getHTML(t, ts, "/docs")
+	if code != 200 {
+		t.Fatalf("GET /docs: status %d", code)
+	}
+	if !strings.Contains(html, "应用发布规范") {
+		t.Errorf("the release spec title is missing from /docs")
+	}
+	// The spec is table-heavy, so this also proves pipe tables render.
+	if !strings.Contains(html, "<table>") {
+		t.Errorf("/docs contains no rendered table")
+	}
+	if !strings.Contains(html, "docs-nav") {
+		t.Errorf("/docs has no sidebar")
+	}
+
+	// Every document is reachable by slug, case-insensitively.
+	for _, path := range []string{"/docs/release-spec", "/docs/API", "/docs/RELEASE-SPEC.md"} {
+		code, html := getHTML(t, ts, path)
+		if code != 200 {
+			t.Errorf("GET %s: status %d", path, code)
+		}
+		if !strings.Contains(html, "docs-body") {
+			t.Errorf("GET %s: no document body", path)
+		}
+	}
+
+	code, html = getHTML(t, ts, "/docs/api")
+	if code != 200 || !strings.Contains(html, "REST API") {
+		t.Errorf("GET /docs/api: status %d, body has title: %v", code, strings.Contains(html, "REST API"))
+	}
+	// Both documents are listed in the sidebar.
+	for _, title := range []string{"应用发布规范", "REST API"} {
+		if !strings.Contains(html, title) {
+			t.Errorf("sidebar is missing %q", title)
+		}
+	}
+
+	if code, _ := getHTML(t, ts, "/docs/does-not-exist"); code != http.StatusNotFound {
+		t.Errorf("unknown document status = %d, want 404", code)
+	}
+	if code, _ := getHTML(t, ts, "/docs/"); code != http.StatusFound {
+		t.Errorf("/docs/ status = %d, want a 302 redirect", code)
+	}
 }

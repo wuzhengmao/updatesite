@@ -18,6 +18,8 @@ WORKDIR /src
 COPY go.mod ./
 COPY cmd/ ./cmd/
 COPY internal/ ./internal/
+# The Markdown docs are embedded into the binary and served at /docs.
+COPY docs/ ./docs/
 
 RUN --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
