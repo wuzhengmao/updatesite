@@ -46,19 +46,25 @@ docker compose up -d --build
 然后打开 <https://localhost:8443>（自签证书，浏览器会警告，选「继续访问」）。
 只看 HTTP 的话是 <http://localhost:8080>，它会 301 跳到 HTTPS。
 
-给这一次构建打个版本戳，会显示在页脚和 `/api/v1/health` 里：
+版本号取自仓库根目录的 **`VERSION` 文件**，已入库，所以服务器上 `git pull`
+之后直接构建就能拿到正确的版本，不需要改任何配置：
 
 ```bash
-VERSION=1.2.0 COMMIT=$(git rev-parse --short HEAD) docker compose up -d --build
+echo 0.3.0 > VERSION && git commit -am "版本 0.3.0"
 ```
 
-构建时间不用管：没传 `BUILD_DATE` 时，站点会回落到二进制自身的生成时间，
-也就是它被链接进镜像的时刻。同一层缓存复用出来的镜像报的是当初那次构建的时间，
-这是诚实的答案。
+要临时构建一个别的版本号（比如候选版），命令行覆盖即可：
 
-**`VERSION` 和 `COMMIT` 要像上面这样内联传给 compose** —— 先赋值再单独执行
-compose 的话它们只是 shell 变量，compose 读不到，会回落成默认值（版本 `dev`、
-提交不显示）。
+```bash
+VERSION=0.3.0-rc1 docker compose up -d --build
+```
+
+提交号与构建时间都能自动处理，不用管：
+
+- **构建时间**：没传 `BUILD_DATE` 时回落到二进制自身的生成时间，也就是它被链接
+  进镜像的时刻。走缓存复用出来的镜像报的是当初那次构建的时间，这是诚实的答案
+- **提交号**：`COMMIT=$(git rev-parse --short HEAD) docker compose up -d --build`
+  可以让页脚显示它；不传就不显示。compose 读不到 shell 变量，所以要像这样内联
 
 ### 不使用 Docker
 
@@ -343,7 +349,7 @@ PLATFORMS=linux/arm64 ./scripts/build.sh    # 只构建 arm64 并载入本地 do
 
 ```bash
 docker buildx build --platform linux/amd64,linux/arm64 \
-  --build-arg VERSION=1.2.0 -t wuzm219/updatesite:1.2.0 --push .
+  -t wuzm219/updatesite:0.2.0 --push .        # 版本号自动取自 VERSION
 ```
 
 ### 推送到 Docker Hub
@@ -412,6 +418,7 @@ docker manifest inspect wuzm219/updatesite:0.1.0   # 确认两个架构都在
 ### 项目结构
 
 ```
+VERSION                版本号，唯一来源；构建时读入，也用于镜像 tag
 cmd/updatesite/        程序入口；含 token 子命令与 -healthcheck 自检模式
 internal/config/       环境变量配置
 internal/semver/       宽松语义化版本解析与比较

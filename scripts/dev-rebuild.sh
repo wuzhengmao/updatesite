@@ -23,7 +23,7 @@ if [ -f .env ]; then
   set +a
 fi
 
-VERSION="${VERSION:-dev}"
+VERSION="${VERSION:-$(cat VERSION 2>/dev/null || echo dev)}"
 COMMIT="${COMMIT:-$(git rev-parse --short HEAD 2>/dev/null || echo none)}"
 BUILD_DATE="${BUILD_DATE:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"
 IMAGE="${IMAGE:-wuzm219/updatesite:latest}"

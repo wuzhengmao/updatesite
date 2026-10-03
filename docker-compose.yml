@@ -2,12 +2,16 @@ services:
   updatesite:
     build:
       context: .
-      # Stamp the build so the footer and /api/v1/health report which image is
-      # deployed: VERSION=1.2.0 docker compose up -d --build
-      # BUILD_DATE is optional; the site falls back to the binary's own
-      # timestamp when it is empty.
+      # All three are optional and empty by default. VERSION empty means "read
+      # the VERSION file at the repository root", so a plain
+      # `git pull && docker compose up -d --build` reports the right version
+      # without editing anything here.
+      #
+      # Override for a one-off, e.g. a release candidate:
+      #   VERSION=0.3.0-rc1 COMMIT=$(git rev-parse --short HEAD) docker compose up -d --build
+      # BUILD_DATE empty falls back to the binary's own timestamp.
       args:
-        VERSION: ${VERSION:-dev}
+        VERSION: ${VERSION:-}
         COMMIT: ${COMMIT:-none}
         BUILD_DATE: ${BUILD_DATE:-}
     image: wuzm219/updatesite:latest

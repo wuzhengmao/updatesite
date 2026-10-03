@@ -9,7 +9,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 IMAGE="${IMAGE:-wuzm219/updatesite}"
-TAG="${TAG:-$(date -u +%Y%m%d)}"
+TAG="${TAG:-$(cat VERSION 2>/dev/null || echo dev)}"
 PLATFORMS="${PLATFORMS:-linux/amd64,linux/arm64}"
 COMMIT="$(git rev-parse --short HEAD 2>/dev/null || echo none)"
 BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"

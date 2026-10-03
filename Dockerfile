@@ -9,7 +9,9 @@ FROM --platform=$BUILDPLATFORM golang:1.24-alpine AS build
 
 ARG TARGETOS
 ARG TARGETARCH
-ARG VERSION=dev
+# Empty means "take it from the VERSION file", which is committed. A release
+# build can still override either value.
+ARG VERSION=
 ARG COMMIT=none
 ARG BUILD_DATE=
 
@@ -20,8 +22,12 @@ COPY cmd/ ./cmd/
 COPY internal/ ./internal/
 # The Markdown docs are embedded into the binary and served at /docs.
 COPY docs/ ./docs/
+# The single source of truth for the version, read below.
+COPY VERSION ./
 
 RUN --mount=type=cache,target=/root/.cache/go-build \
+    set -eux; \
+    : "${VERSION:=$(cat VERSION)}"; \
     CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
     go build -trimpath -tags netgo,osusergo \
         -ldflags "-s -w \
