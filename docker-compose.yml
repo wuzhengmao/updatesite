@@ -4,10 +4,12 @@ services:
       context: .
       # Stamp the build so the footer and /api/v1/health report which image is
       # deployed: VERSION=1.2.0 docker compose up -d --build
+      # BUILD_DATE is optional; the site falls back to the binary's own
+      # timestamp when it is empty.
       args:
         VERSION: ${VERSION:-dev}
         COMMIT: ${COMMIT:-none}
-        BUILD_DATE: ${BUILD_DATE:-unknown}
+        BUILD_DATE: ${BUILD_DATE:-}
     image: wuzm219/updatesite:latest
     container_name: updatesite
     restart: unless-stopped

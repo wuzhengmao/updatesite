@@ -10,6 +10,7 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"os"
 	"runtime/debug"
 	"strings"
 	"time"
@@ -310,6 +311,14 @@ func formatBuildTime(raw string) string {
 	raw = strings.TrimSpace(raw)
 	switch raw {
 	case "", "unknown", "none":
+		// Nothing was injected. `docker compose up --build` cannot run `date`,
+		// so its BUILD_DATE argument lands on a placeholder; fall back to the
+		// timestamp of the binary itself, which in an image is when it was
+		// linked. A cached layer therefore reports the build it really came
+		// from, which is the honest answer.
+		if t, ok := executableTime(); ok {
+			return t.Local().Format("2006-01-02 15:04 -07:00")
+		}
 		return ""
 	}
 	for _, layout := range []string{time.RFC3339, "2006-01-02T15:04:05", "2006-01-02"} {
@@ -318,6 +327,19 @@ func formatBuildTime(raw string) string {
 		}
 	}
 	return raw
+}
+
+// executableTime reports the modification time of the running binary.
+func executableTime() (time.Time, bool) {
+	path, err := os.Executable()
+	if err != nil {
+		return time.Time{}, false
+	}
+	st, err := os.Stat(path)
+	if err != nil || !st.Mode().IsRegular() || st.ModTime().IsZero() {
+		return time.Time{}, false
+	}
+	return st.ModTime(), true
 }
 
 // render executes a template and reports failures as a plain 500.

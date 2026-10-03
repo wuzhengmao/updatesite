@@ -49,12 +49,16 @@ docker compose up -d --build
 给这一次构建打个版本戳，会显示在页脚和 `/api/v1/health` 里：
 
 ```bash
-VERSION=1.2.0 COMMIT=$(git rev-parse --short HEAD) \
-BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ) docker compose up -d --build
+VERSION=1.2.0 COMMIT=$(git rev-parse --short HEAD) docker compose up -d --build
 ```
 
-**`VERSION` 和 `BUILD_DATE` 要像上面这样内联传给 compose** —— 先赋值再单独执行
-compose 的话它们只是 shell 变量，compose 读不到，构建戳会变成默认值。
+构建时间不用管：没传 `BUILD_DATE` 时，站点会回落到二进制自身的生成时间，
+也就是它被链接进镜像的时刻。同一层缓存复用出来的镜像报的是当初那次构建的时间，
+这是诚实的答案。
+
+**`VERSION` 和 `COMMIT` 要像上面这样内联传给 compose** —— 先赋值再单独执行
+compose 的话它们只是 shell 变量，compose 读不到，会回落成默认值（版本 `dev`、
+提交不显示）。
 
 ### 不使用 Docker
 
@@ -368,9 +372,13 @@ docker manifest inspect wuzm219/updatesite:0.1.0   # 确认两个架构都在
 0.1.0+d0651d4 · 2026-10-03 13:32 +08:00
 ```
 
-构建戳以 UTC 存储（便于比较），显示时按 `TZ` 转成当地时间，偏移用数字形式而非
-`CST` 这类缩写 —— 单看 `CST` 无法区分中国标准时间、美国中部时间和古巴标准时间。
-时区库已嵌入二进制，所以 `scratch` 镜像里不装 tzdata 也能用。
+构建时间来自 `BUILD_DATE`（UTC 存储，便于比较）。没传时回落到二进制自身的
+生成时间 —— 在镜像里那就是它被链接的时刻，走缓存复用出来的镜像报的也是当初
+那次构建的时间。
+
+显示时按 `TZ` 转成当地时间，偏移用数字形式而非 `CST` 这类缩写 —— 单看 `CST`
+无法区分中国标准时间、美国中部时间和古巴标准时间。时区库已嵌入二进制，
+所以 `scratch` 镜像里不装 tzdata 也能用。
 
 ### 本地改完代码后重建
 
