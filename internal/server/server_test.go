@@ -250,7 +250,18 @@ func TestUploadPage(t *testing.T) {
 	if code != 200 {
 		t.Fatalf("/upload status = %d", code)
 	}
-	for _, want := range []string{"上传发布", "upload-form", "/static/upload.js"} {
+	for _, want := range []string{
+		"上传发布",
+		"upload-form",
+		"/static/upload.js",
+		`id="drop"`,         // drag and drop target
+		`id="app-ids"`,      // suggestion list for the application id
+		`id="progress-bar"`, // upload progress
+		`name="token"`,      // the token field
+		`name="file"`,
+		`name="version"`,
+		`novalidate`, // validation happens in script, a hidden input cannot block it
+	} {
 		if !strings.Contains(html, want) {
 			t.Errorf("/upload is missing %q", want)
 		}

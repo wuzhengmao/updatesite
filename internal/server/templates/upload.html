@@ -11,25 +11,37 @@
     支持 <code>.zip</code>、<code>.tar</code>、<code>.tar.gz</code>、<code>.tar.bz2</code>。
   </p>
 
-  <form id="upload-form" class="upload-form" autocomplete="off">
+  <form id="upload-form" class="upload-form" autocomplete="off" novalidate>
     <label class="field">
       <span>应用 ID</span>
-      <input name="app" required pattern="[A-Za-z0-9._-]+" placeholder="myapp" spellcheck="false">
+      <input id="f-app" name="app" list="app-ids" placeholder="mti-sip-phone" spellcheck="false">
+      <datalist id="app-ids"></datalist>
     </label>
     <label class="field">
       <span>上传令牌</span>
-      <input name="token" required placeholder="由管理员提供" spellcheck="false">
+      <input id="f-token" name="token" placeholder="由管理员提供" spellcheck="false">
     </label>
     <label class="field">
       <span>版本号<span class="muted">（可选）</span></span>
-      <input name="version" placeholder="留空则从压缩包内推断" spellcheck="false">
+      <input id="f-version" name="version" placeholder="留空则从压缩包内推断" spellcheck="false">
     </label>
-    <label class="field">
-      <span>压缩包</span>
-      <input type="file" name="file" required>
-    </label>
-    <div class="field">
-      <button class="btn" type="submit">上传并发布</button>
+
+    <div class="field field-wide">
+      <span>发布包</span>
+      <label id="drop" class="dropzone" for="f-file">
+        <input type="file" id="f-file" name="file" accept=".zip,.tar,.gz,.tgz,.bz2,.tbz2">
+        <span class="dropzone-arrow" aria-hidden="true">↑</span>
+        <span class="dropzone-main">把压缩包拖到这里，或点击选择</span>
+        <span class="dropzone-file" id="drop-file"></span>
+      </label>
+    </div>
+
+    <div class="field field-wide">
+      <button class="btn" type="submit" id="submit">上传并发布</button>
+      <div class="progress-wrap" id="progress-wrap" hidden>
+        <div class="progress"><div class="progress-bar" id="progress-bar"></div></div>
+        <p class="progress-text muted" id="progress-text"></p>
+      </div>
     </div>
   </form>
 
@@ -58,7 +70,7 @@
   -H "Authorization: Bearer &lt;令牌&gt;" \
   -F "file=@release.zip" \
   -F "version=1.2.0" \
-  {{.Site.BaseURL}}/api/v1/apps/&lt;应用ID&gt;/upload</code></pre>
+  {{if .Site.BaseURL}}{{.Site.BaseURL}}{{else}}http://&lt;站点地址&gt;{{end}}/api/v1/apps/&lt;应用ID&gt;/upload</code></pre>
   <p class="muted">
     也可以直接发送原始归档：<code>curl --data-binary @release.tar.gz
     -H "Content-Type: application/gzip" -H "Authorization: Bearer &lt;令牌&gt;"
