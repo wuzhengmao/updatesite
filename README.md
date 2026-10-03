@@ -102,7 +102,7 @@ curl -X POST http://localhost:8080/api/v1/rescan
 同名版本整体替换。先让管理员生成令牌：
 
 ```bash
-updatesite token myapp        # 令牌只由应用 ID 推导，任何环境都相同
+docker exec updatesite updatesite token myapp   # 令牌只由应用 ID 推导，任何环境都相同
 ```
 
 开发人员拿到令牌后：

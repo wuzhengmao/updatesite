@@ -40,10 +40,15 @@ RUN mkdir -p /out/cache
 FROM scratch
 
 COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
-COPY --from=build /out/updatesite /updatesite
+# Installed on PATH so the administration commands read the same inside and
+# outside the container: docker exec <container> updatesite token <app-id>
+COPY --from=build /out/updatesite /usr/local/bin/updatesite
 COPY --from=build /out/cache /var/cache/updatesite
 
-ENV DATA_DIR=/data \
+# PATH is declared explicitly: scratch images have nothing on it otherwise, and
+# docker exec does not search beyond it.
+ENV PATH=/usr/local/bin:/usr/bin:/bin \
+    DATA_DIR=/data \
     CACHE_DIR=/var/cache/updatesite \
     ADDR=:8080 \
     SCAN_INTERVAL=15s
@@ -53,6 +58,6 @@ VOLUME ["/data"]
 
 # The image has no shell or curl, so the binary probes itself.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-    CMD ["/updatesite", "-healthcheck"]
+    CMD ["/usr/local/bin/updatesite", "-healthcheck"]
 
-ENTRYPOINT ["/updatesite"]
+ENTRYPOINT ["/usr/local/bin/updatesite"]

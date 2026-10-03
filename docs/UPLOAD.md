@@ -13,9 +13,20 @@
 令牌由**应用 ID 单独推导**，和运行环境无关：同一个应用 ID 在任何站点、
 任何部署上算出来的令牌都一样。管理员算一次告诉开发人员就行。
 
+站点是用 Docker 跑的话，直接在容器里算（镜像里没有 shell，
+但二进制在 `PATH` 上，命令和本机一致）：
+
+```bash
+docker exec updatesite updatesite token myapp
+```
+
+本地装了 Go 或已编译出二进制时：
+
 ```bash
 updatesite token myapp
 ```
+
+应用 ID 不需要事先存在，`token` 是纯函数，随便什么 ID 都能算出来。
 
 输出里会带上一条可以直接粘贴的 curl 命令：
 
@@ -36,8 +47,8 @@ updatesite token myapp
 | `updatesite token <应用ID> -q` | 只输出令牌，便于脚本使用 |
 | `updatesite token --list` | 列出归档目录里所有应用的令牌 |
 
-选项写在应用 ID 前面或后面都可以。数据目录用 `DATA_DIR` 指定，
-`--list` 会去读它。
+选项写在应用 ID 前面或后面都可以。本机运行时数据目录用 `DATA_DIR` 指定，
+`--list` 会去读它；在容器里跑时 `DATA_DIR` 已经是 `/data`，读的就是挂载进来的归档目录。
 
 > **安全边界**：令牌的推导密钥是编译在程序里的。这样做是为了让令牌
 > 「任何环境都一致」，代价是**拿到这个程序（或源码）的人可以为任意应用
