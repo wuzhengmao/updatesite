@@ -1,11 +1,14 @@
 package server_test
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -17,7 +20,239 @@ import (
 	"github.com/mti/updatesite/internal/config"
 	"github.com/mti/updatesite/internal/index"
 	"github.com/mti/updatesite/internal/server"
+	"github.com/mti/updatesite/internal/token"
 )
+
+// zipBytes builds a zip archive in memory for upload tests.
+func zipBytes(t *testing.T, entries map[string]string) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	for name, body := range entries {
+		w, err := zw.Create(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		w.Write([]byte(body))
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
+}
+
+// postMultipart sends a multipart upload with an optional bearer token.
+func postMultipart(t *testing.T, url string, archive []byte, fields map[string]string, bearer string) (int, map[string]any) {
+	t.Helper()
+	var body bytes.Buffer
+	mw := multipart.NewWriter(&body)
+	fw, err := mw.CreateFormFile("file", "release.zip")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fw.Write(archive)
+	for k, v := range fields {
+		mw.WriteField(k, v)
+	}
+	mw.Close()
+
+	req, err := http.NewRequest(http.MethodPost, url, &body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	if bearer != "" {
+		req.Header.Set("Authorization", "Bearer "+bearer)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var out map[string]any
+	json.NewDecoder(resp.Body).Decode(&out)
+	return resp.StatusCode, out
+}
+
+func TestUploadRequiresToken(t *testing.T) {
+	ts, _ := newSite(t)
+	archive := zipBytes(t, map[string]string{"App-1.0.0-windows-x64.exe": "win"})
+	url := ts.URL + "/api/v1/apps/newapp/upload"
+
+	if code, _ := postMultipart(t, url, archive, map[string]string{"version": "1.0.0"}, ""); code != http.StatusUnauthorized {
+		t.Errorf("without a token: status %d, want 401", code)
+	}
+	if code, _ := postMultipart(t, url, archive, map[string]string{"version": "1.0.0"}, "not-the-token"); code != http.StatusUnauthorized {
+		t.Errorf("with a wrong token: status %d, want 401", code)
+	}
+	// A token minted for a different application must not work either.
+	if code, _ := postMultipart(t, url, archive, map[string]string{"version": "1.0.0"}, token.For("otherapp")); code != http.StatusUnauthorized {
+		t.Errorf("with another app's token: status %d, want 401", code)
+	}
+}
+
+func TestUploadPublishesRelease(t *testing.T) {
+	ts, dir := newSite(t)
+	appID := "newapp"
+
+	code, body := postMultipart(t, ts.URL+"/api/v1/apps/"+appID+"/upload", zipBytes(t, map[string]string{
+		"App-1.0.0-windows-x64.exe":    "windows build",
+		"App-1.0.0-linux-arm64.tar.gz": "linux build",
+		"CHANGELOG.md":                 "## 1.0.0\n\n- 首个版本",
+		"release.json":                 `{"channel":"stable","title":"首发"}`,
+	}), map[string]string{"version": "1.0.0"}, token.For(appID))
+
+	if code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201: %v", code, body)
+	}
+	if body["version"] != "1.0.0" || body["replaced"] != false {
+		t.Errorf("unexpected response: %v", body)
+	}
+
+	// The files must be on disk, under the version directory.
+	for _, name := range []string{"App-1.0.0-windows-x64.exe", "CHANGELOG.md", "release.json"} {
+		p := filepath.Join(dir, "apps", appID, "1.0.0", name)
+		if _, err := os.Stat(p); err != nil {
+			t.Errorf("missing %s: %v", p, err)
+		}
+	}
+	// Nothing temporary may be left behind.
+	entries, _ := os.ReadDir(filepath.Join(dir, "apps", appID))
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), ".") {
+			t.Errorf("leftover staging entry %q", e.Name())
+		}
+	}
+
+	// The release becomes visible once the background scan lands.
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		_, api := getJSON(t, ts, "/api/v1/apps/"+appID+"/latest")
+		if rel, ok := api["release"].(map[string]any); ok && rel["version"] == "1.0.0" {
+			if rel["title"] != "首发" {
+				t.Errorf("title = %v", rel["title"])
+			}
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Error("the uploaded release never appeared in the API")
+}
+
+func TestUploadRawBody(t *testing.T) {
+	ts, dir := newSite(t)
+	appID := "rawapp"
+	archive := zipBytes(t, map[string]string{"Tool-2.0.0-linux-x64.tar.gz": "linux"})
+
+	req, _ := http.NewRequest(http.MethodPost,
+		ts.URL+"/api/v1/apps/"+appID+"/upload?version=2.0.0&filename=release.zip",
+		bytes.NewReader(archive))
+	req.Header.Set("Content-Type", "application/zip")
+	req.Header.Set("X-Upload-Token", token.For(appID))
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("status = %d, want 201", resp.StatusCode)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "apps", appID, "2.0.0", "Tool-2.0.0-linux-x64.tar.gz")); err != nil {
+		t.Errorf("raw upload did not land on disk: %v", err)
+	}
+}
+
+func TestUploadInfersVersionFromDirectory(t *testing.T) {
+	ts, dir := newSite(t)
+	appID := "inferapp"
+
+	code, body := postMultipart(t, ts.URL+"/api/v1/apps/"+appID+"/upload", zipBytes(t, map[string]string{
+		"myapp-3.2.1/App-3.2.1-windows-x64.exe": "win",
+		"myapp-3.2.1/CHANGELOG.md":              "notes",
+	}), nil, token.For(appID))
+	if code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201: %v", code, body)
+	}
+	if body["version"] != "3.2.1" {
+		t.Errorf("version = %v, want 3.2.1", body["version"])
+	}
+	if _, err := os.Stat(filepath.Join(dir, "apps", appID, "3.2.1", "App-3.2.1-windows-x64.exe")); err != nil {
+		t.Errorf("release not installed: %v", err)
+	}
+}
+
+func TestUploadRejectsBadArchives(t *testing.T) {
+	ts, _ := newSite(t)
+	appID := "badapp"
+	url := ts.URL + "/api/v1/apps/" + appID + "/upload"
+	tok := token.For(appID)
+
+	cases := []struct {
+		name  string
+		body  []byte
+		field map[string]string
+		want  string
+	}{
+		{"not an archive", []byte("hello world"), map[string]string{"version": "1.0.0"}, "unsupported_archive"},
+		{"no installable files", zipBytes(t, map[string]string{"CHANGELOG.md": "x"}), map[string]string{"version": "1.0.0"}, "publish_failed"},
+		{"undeterminable version", zipBytes(t, map[string]string{"a.exe": "x"}), nil, "publish_failed"},
+		{"invalid version", zipBytes(t, map[string]string{"a.exe": "x"}), map[string]string{"version": "../x"}, "publish_failed"},
+	}
+	for _, c := range cases {
+		code, body := postMultipart(t, url, c.body, c.field, tok)
+		if code != http.StatusBadRequest {
+			t.Errorf("%s: status %d, want 400 (%v)", c.name, code, body)
+			continue
+		}
+		errObj, _ := body["error"].(map[string]any)
+		if errObj["code"] != c.want {
+			t.Errorf("%s: error code = %v, want %q", c.name, errObj["code"], c.want)
+		}
+	}
+}
+
+func TestUploadDisabled(t *testing.T) {
+	ts, dir := newSite(t)
+	// Rebuild a server with uploads turned off.
+	cfg := config.Config{
+		DataDir: dir, CacheDir: filepath.Join(dir, "cache"),
+		ScanInterval: time.Minute, SiteTitle: "T", CORSOrigin: "*",
+		UploadEnabled: false, MaxUpload: 1 << 20,
+	}
+	idx := index.New(cfg.DataDir, cfg.CacheDir)
+	idx.Scan()
+	srv, err := server.New(cfg, idx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	off := httptest.NewServer(srv.Handler())
+	defer off.Close()
+
+	archive := zipBytes(t, map[string]string{"App-1.0.0-windows-x64.exe": "win"})
+	code, _ := postMultipart(t, off.URL+"/api/v1/apps/disabledapp/upload", archive,
+		map[string]string{"version": "1.0.0"}, token.For("disabledapp"))
+	if code != http.StatusForbidden {
+		t.Errorf("status = %d, want 403 when uploads are disabled", code)
+	}
+	if code, _ := getHTML(t, off, "/upload"); code != http.StatusNotFound {
+		t.Errorf("/upload status = %d, want 404 when uploads are disabled", code)
+	}
+	_ = ts
+}
+
+func TestUploadPage(t *testing.T) {
+	ts, _ := newSite(t)
+	code, html := getHTML(t, ts, "/upload")
+	if code != 200 {
+		t.Fatalf("/upload status = %d", code)
+	}
+	for _, want := range []string{"上传发布", "upload-form", "/static/upload.js"} {
+		if !strings.Contains(html, want) {
+			t.Errorf("/upload is missing %q", want)
+		}
+	}
+}
 
 // write creates a file below root, making any missing parent directories.
 func write(t *testing.T, root, rel, content string) string {
@@ -72,11 +307,13 @@ func newSite(t *testing.T) (*httptest.Server, string) {
 	write(t, dir, "apps/demo/.hidden/1.0.0/x.exe", "hidden")
 
 	cfg := config.Config{
-		DataDir:      dir,
-		CacheDir:     filepath.Join(dir, "cache"),
-		ScanInterval: time.Minute,
-		SiteTitle:    "Test Update Site",
-		CORSOrigin:   "*",
+		DataDir:       dir,
+		CacheDir:      filepath.Join(dir, "cache"),
+		ScanInterval:  time.Minute,
+		SiteTitle:     "Test Update Site",
+		CORSOrigin:    "*",
+		UploadEnabled: true,
+		MaxUpload:     8 << 20,
 	}
 	idx := index.New(cfg.DataDir, cfg.CacheDir)
 	idx.Scan()
@@ -443,6 +680,16 @@ func TestDocsPages(t *testing.T) {
 		if !strings.Contains(html, title) {
 			t.Errorf("sidebar is missing %q", title)
 		}
+	}
+
+	// Cross references between documents must survive rendering as site links
+	// rather than being dropped by the URL scheme check.
+	code, html = getHTML(t, ts, "/docs/upload")
+	if code != 200 {
+		t.Fatalf("GET /docs/upload: status %d", code)
+	}
+	if !strings.Contains(html, `href="/docs/release-spec"`) {
+		t.Errorf("/docs/upload does not link to the release specification")
 	}
 
 	if code, _ := getHTML(t, ts, "/docs/does-not-exist"); code != http.StatusNotFound {

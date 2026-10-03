@@ -4,6 +4,7 @@ package config
 import (
 	"log"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -21,6 +22,9 @@ type Config struct {
 	CORSOrigin   string // value for Access-Control-Allow-Origin on the API
 	RescanToken  string // when set, POST /api/v1/rescan requires this bearer token
 	LogRequests  bool
+
+	UploadEnabled bool  // expose the release upload endpoint
+	MaxUpload     int64 // largest accepted upload, in bytes
 }
 
 // Load reads the configuration from the environment, applying defaults.
@@ -36,6 +40,13 @@ func Load() Config {
 		CORSOrigin:   env("CORS_ORIGIN", "*"),
 		RescanToken:  env("RESCAN_TOKEN", ""),
 		LogRequests:  envBool("LOG_REQUESTS", true),
+
+		UploadEnabled: envBool("UPLOAD_ENABLED", true),
+		MaxUpload:     envBytes("MAX_UPLOAD", 2<<30),
+	}
+	if c.MaxUpload < 1<<20 {
+		log.Printf("config: MAX_UPLOAD %d is too small, using 1MiB", c.MaxUpload)
+		c.MaxUpload = 1 << 20
 	}
 	if c.ScanInterval < time.Second {
 		log.Printf("config: SCAN_INTERVAL %s is too small, using 1s", c.ScanInterval)
@@ -62,6 +73,47 @@ func envDuration(key string, def time.Duration) time.Duration {
 		return def
 	}
 	return d
+}
+
+// envBytes parses a byte count, accepting a plain number or a suffix such as
+// "512MiB", "2GiB" or "500MB".
+func envBytes(key string, def int64) int64 {
+	v, ok := os.LookupEnv(key)
+	if !ok || strings.TrimSpace(v) == "" {
+		return def
+	}
+	n, err := parseBytes(v)
+	if err != nil {
+		log.Printf("config: invalid %s=%q (%v), using %d", key, v, err, def)
+		return def
+	}
+	return n
+}
+
+func parseBytes(s string) (int64, error) {
+	s = strings.TrimSpace(strings.ToUpper(s))
+	units := []struct {
+		suffix string
+		scale  int64
+	}{
+		{"GIB", 1 << 30}, {"MIB", 1 << 20}, {"KIB", 1 << 10},
+		{"GB", 1e9}, {"MB", 1e6}, {"KB", 1e3},
+		{"G", 1 << 30}, {"M", 1 << 20}, {"K", 1 << 10},
+		{"B", 1},
+	}
+	scale := int64(1)
+	for _, u := range units {
+		if strings.HasSuffix(s, u.suffix) {
+			scale = u.scale
+			s = strings.TrimSpace(strings.TrimSuffix(s, u.suffix))
+			break
+		}
+	}
+	n, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return 0, err
+	}
+	return int64(n * float64(scale)), nil
 }
 
 func envBool(key string, def bool) bool {

@@ -24,13 +24,20 @@ services:
       # RESCAN_TOKEN: "change-me"
       SCAN_INTERVAL: "15s"
       # CORS_ORIGIN: "*"
+      # Set to "false" to remove the upload endpoint and page entirely.
+      # UPLOAD_ENABLED: "true"
+      # Largest accepted upload. Accepts plain bytes or a suffix.
+      # MAX_UPLOAD: "2GiB"
 
     volumes:
-      # The archive. Publish by dropping <app-id>/<version>/ directories in here.
-      # Keep it read-only unless you want the container to be able to write.
+      # The archive. Publish either by dropping <app-id>/<version>/ directories
+      # in here, or through POST /api/v1/apps/{app}/upload.
+      # Uploading needs write access, so this is mounted read-write. Add ":ro"
+      # if you publish only by hand and want the container unable to write;
+      # uploads will then fail with a clear "not writable" message.
       # Point this at your own path in production, for example
-      # /srv/updates/apps:/data/apps:ro
-      - ./release/apps:/data/apps:ro
+      # /srv/updates/apps:/data/apps
+      - ./release/apps:/data/apps
       # Persists computed sha256 digests across restarts.
       - updatesite-cache:/var/cache/updatesite
 

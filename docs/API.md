@@ -258,6 +258,56 @@ curl -X POST -H "Authorization: Bearer $TOKEN" https://update.example.com/api/v1
 
 ---
 
+## `POST /api/v1/apps/{app}/upload`
+
+上传一个发布压缩包，解包后归档到 `apps/{app}/{版本号}/`，同名版本整体替换。
+详细说明见[上传发布](UPLOAD.md)。
+
+鉴权用**由应用 ID 推导的上传令牌**，
+`Authorization: Bearer <令牌>` 或 `X-Upload-Token: <令牌>`：
+
+```bash
+curl -fS -X POST \
+  -H "Authorization: Bearer $TOKEN" \
+  -F "file=@release.zip" \
+  -F "version=1.2.0" \
+  https://update.example.com/api/v1/apps/myapp/upload
+```
+
+请求体两种形式：
+
+- `multipart/form-data`：含归档的 file 部分，加一个可选的 `version` 文本字段
+- 其它 Content-Type：请求体本身就是归档，版本号用 `?version=` 传
+
+支持的格式为 zip、tar、tar.gz、tar.bz2（按文件头魔数识别，不看扩展名）。
+
+成功返回 `201`：
+
+```json
+{
+  "ok": true,
+  "app": "myapp",
+  "version": "1.2.0",
+  "replaced": false,
+  "bytes": 12345678,
+  "files": [{"file": "MyApp-1.2.0-windows-x64.exe", "size": 9000000}],
+  "pageUrl": "https://update.example.com/a/myapp/1.2.0",
+  "apiUrl": "https://update.example.com/api/v1/apps/myapp/releases/1.2.0",
+  "message": "release installed, the site is rescanning"
+}
+```
+
+| 状态码 | 含义 |
+| --- | --- |
+| `201` | 已发布 |
+| `400` | 应用 ID 非法、版本号无法确定、归档损坏或不含可安装文件 |
+| `401` | 令牌缺失或错误 |
+| `403` | 站点关闭了上传（`UPLOAD_ENABLED=false`） |
+| `413` | 超过 `MAX_UPLOAD` |
+| `503` | 归档目录不可写 |
+
+---
+
 ## `GET /dl/{app}/{version}/{file}`
 
 下载产物。`{version}` 可以是 `latest`。`{file}` 支持相对路径，

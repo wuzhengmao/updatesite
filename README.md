@@ -4,6 +4,8 @@
 就完成发布，站点自动归档、计算校验和、提供网页浏览与 REST API 查询。
 
 - **发布即拷贝** —— 目录结构本身就是数据库，`cp` 进去就生效，不用登录后台
+- **也能上传发布** —— 打包成 zip/tar.gz 通过接口或网页上传，站点自动解包归档，
+  令牌由应用 ID 推导，管理员算一次告知开发人员即可
 - **多产品多平台** —— 每个应用独立 ID，每个版本按 `os` / `arch` 归档安装包
 - **REST API** —— 客户端传当前版本号即可查询是否有新版本、下载哪个包
 - **内置文档** —— 发布规范与 API 说明随二进制一起分发，浏览 `/docs` 即可查看
@@ -96,6 +98,25 @@ curl -X POST http://localhost:8080/api/v1/rescan
 安装包文件名里带上平台和架构（`windows`、`x64`、`linux`、`arm64`…），
 站点会自动识别归档；识别不出来也不会出错，只是需要手动用 `release.json` 声明。
 
+**用上传接口发布**：把同样的内容打成 zip 或 tar.gz 上传，站点自动解包归档，
+同名版本整体替换。先让管理员生成令牌：
+
+```bash
+updatesite token myapp        # 令牌只由应用 ID 推导，任何环境都相同
+```
+
+开发人员拿到令牌后：
+
+```bash
+curl -fS -X POST \
+  -H "Authorization: Bearer $TOKEN" \
+  -F "file=@release.zip" -F "version=1.2.0" \
+  https://update.example.com/api/v1/apps/myapp/upload
+```
+
+网页端 <http://localhost:8080/upload> 也可以直接拖文件上传。
+细节见[上传发布](docs/UPLOAD.md)。上传需要归档目录可写，详见 `docker-compose.yml`。
+
 ---
 
 ## API
@@ -134,9 +155,10 @@ curl "http://localhost:8080/api/v1/apps/myapp/check?version=1.0.0&os=windows&arc
 | `GET /api/v1/apps/{app}/releases/{version}` | 指定版本 |
 | `GET /api/v1/apps/{app}/latest` | 最新版本，可按 `os` / `arch` 筛选 |
 | `GET /api/v1/apps/{app}/check` | **查更新** |
+| `POST /api/v1/apps/{app}/upload` | **上传发布**压缩包，需令牌 |
 | `POST /api/v1/rescan` | 立即重新扫描 |
 | `GET /dl/{app}/{version}/{file}` | 下载；版本可写 `latest`，支持断点续传 |
-| `GET /docs` | 内置文档（发布规范、API 说明） |
+| `GET /docs` | 内置文档（发布规范、上传说明、API） |
 
 完整字段说明见 [API 文档](docs/API.md)，运行时也可以直接在站点上访问
 <http://localhost:8080/docs> 查看同样的内容。
@@ -159,6 +181,8 @@ curl "http://localhost:8080/api/v1/apps/myapp/check?version=1.0.0&os=windows&arc
 | `CORS_ORIGIN` | `*` | API 的 `Access-Control-Allow-Origin` |
 | `RESCAN_TOKEN` | — | 设置后 `POST /api/v1/rescan` 需要 Bearer 令牌 |
 | `LOG_REQUESTS` | `true` | 是否打印访问日志 |
+| `UPLOAD_ENABLED` | `true` | 是否开放上传接口与上传页面 |
+| `MAX_UPLOAD` | `2GiB` | 单个上传包的大小上限，支持 `512MiB` 这类后缀 |
 
 ---
 
@@ -197,16 +221,19 @@ docker buildx build --platform linux/amd64,linux/arm64 \
 ### 项目结构
 
 ```
-cmd/updatesite/        程序入口，含 -healthcheck 自检模式
+cmd/updatesite/        程序入口；含 token 子命令与 -healthcheck 自检模式
 internal/config/       环境变量配置
 internal/semver/       宽松语义化版本解析与比较
 internal/index/        归档扫描、平台识别、校验和缓存、快照发布
-internal/server/       HTTP 路由、JSON API、下载、网页与模板
+internal/token/        由应用 ID 推导上传令牌
+internal/upload/       压缩包解包、版本推断、原子替换
+internal/server/       HTTP 路由、JSON API、上传、下载、网页与模板
 internal/buildinfo/    构建期注入的版本信息
 scripts/publish.sh     发布脚本
 docs/                  文档，同时被嵌入二进制并在 /docs 提供浏览
 ├── docs.go            把本目录的 .md 嵌入二进制
 ├── RELEASE-SPEC.md    发布规范
+├── UPLOAD.md          上传发布说明
 └── API.md             API 文档
 ```
 

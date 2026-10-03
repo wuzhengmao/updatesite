@@ -83,6 +83,10 @@ func (s *Server) routes() *http.ServeMux {
 	mux.HandleFunc("GET /api/v1/apps/{app}/latest", s.handleLatest)
 	mux.HandleFunc("GET /api/v1/apps/{app}/check", s.handleCheck)
 	mux.HandleFunc("POST /api/v1/rescan", s.handleRescan)
+	mux.HandleFunc("POST /api/v1/apps/{app}/upload", s.handleUpload)
+
+	// Upload page.
+	mux.HandleFunc("GET /upload", s.handleUploadPage)
 
 	// Downloads.
 	mux.HandleFunc("GET /dl/{app}/{version}/{file...}", s.handleDownload)
@@ -253,23 +257,27 @@ func (s *Server) lookupApp(w http.ResponseWriter, r *http.Request) (*index.App, 
 
 // siteInfo carries the values every page needs.
 type siteInfo struct {
-	Title     string
-	Subtitle  string
-	Version   string
-	Year      int
-	Stats     index.Stats
-	AppsCount int
+	Title         string
+	Subtitle      string
+	Version       string
+	BaseURL       string
+	Year          int
+	Stats         index.Stats
+	AppsCount     int
+	UploadEnabled bool
 }
 
 func (s *Server) site() siteInfo {
 	st := s.idx.Stats()
 	return siteInfo{
-		Title:     s.cfg.SiteTitle,
-		Subtitle:  s.cfg.SiteSubtitle,
-		Version:   buildinfo.Version,
-		Year:      time.Now().Year(),
-		Stats:     st,
-		AppsCount: len(s.idx.Current().PublicApps()),
+		Title:         s.cfg.SiteTitle,
+		Subtitle:      s.cfg.SiteSubtitle,
+		Version:       buildinfo.Version,
+		BaseURL:       s.cfg.BaseURL,
+		Year:          time.Now().Year(),
+		Stats:         st,
+		AppsCount:     len(s.idx.Current().PublicApps()),
+		UploadEnabled: s.cfg.UploadEnabled,
 	}
 }
 

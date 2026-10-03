@@ -5,13 +5,14 @@ import (
 	"testing"
 )
 
-func render(t *testing.T, src string) string {
+// md renders Markdown the way a changelog does.
+func md(t *testing.T, src string) string {
 	t.Helper()
 	return string(RenderMarkdown(src))
 }
 
 func TestRenderMarkdownTable(t *testing.T) {
-	got := render(t, "| 名称 | 说明 | 备注 |\n| :--- | ---: | :---: |\n| `a` | **粗** | 值 |\n| b | 2 |\n")
+	got := md(t, "| 名称 | 说明 | 备注 |\n| :--- | ---: | :---: |\n| `a` | **粗** | 值 |\n| b | 2 |\n")
 
 	for _, want := range []string{
 		`<div class="table-wrap"><table>`,
@@ -45,25 +46,25 @@ func TestRenderMarkdownRuleIsNotATable(t *testing.T) {
 		"标题\n===\n",
 		"a | b\n***\n",
 	} {
-		got := render(t, src)
+		got := md(t, src)
 		if strings.Contains(got, "<table") {
 			t.Errorf("RenderMarkdown(%q) produced a table:\n%s", src, got)
 		}
 	}
-	if got := render(t, "some text | more\n---\n"); !strings.Contains(got, "<hr>") {
+	if got := md(t, "some text | more\n---\n"); !strings.Contains(got, "<hr>") {
 		t.Errorf("expected a rule, got:\n%s", got)
 	}
 }
 
 func TestRenderMarkdownSingleColumnTable(t *testing.T) {
-	got := render(t, "| 项目 |\n| --- |\n| 甲 |\n")
+	got := md(t, "| 项目 |\n| --- |\n| 甲 |\n")
 	if !strings.Contains(got, "<table>") || !strings.Contains(got, "<td>甲</td>") {
 		t.Errorf("single column table not rendered:\n%s", got)
 	}
 }
 
 func TestRenderMarkdownTableStopsAtBlankLine(t *testing.T) {
-	got := render(t, "| a | b |\n| --- | --- |\n| 1 | 2 |\n\n普通段落\n")
+	got := md(t, "| a | b |\n| --- | --- |\n| 1 | 2 |\n\n普通段落\n")
 	if !strings.Contains(got, "<td>1</td>") {
 		t.Errorf("row not rendered:\n%s", got)
 	}
@@ -74,7 +75,7 @@ func TestRenderMarkdownTableStopsAtBlankLine(t *testing.T) {
 
 // Everything inside a cell goes through the same escaping as body text.
 func TestRenderMarkdownTableEscapes(t *testing.T) {
-	got := render(t, "| x |\n| --- |\n| <img src=x onerror=alert(1)> |\n")
+	got := md(t, "| x |\n| --- |\n| <img src=x onerror=alert(1)> |\n")
 	if strings.Contains(got, "<img") {
 		t.Errorf("raw HTML leaked through a table cell:\n%s", got)
 	}
@@ -84,7 +85,7 @@ func TestRenderMarkdownTableEscapes(t *testing.T) {
 }
 
 func TestRenderMarkdownBlockBasics(t *testing.T) {
-	got := render(t, "# 标题\n\n- 甲\n- 乙\n\n1. 一\n\n> 引用\n\n```json\n{\"a\": 1}\n```\n")
+	got := md(t, "# 标题\n\n- 甲\n- 乙\n\n1. 一\n\n> 引用\n\n```json\n{\"a\": 1}\n```\n")
 	for _, want := range []string{
 		"<h1>标题</h1>", "<ul>", "<li>甲</li>", "<ol>", "<li>一</li>",
 		"<blockquote>引用</blockquote>",
@@ -93,6 +94,37 @@ func TestRenderMarkdownBlockBasics(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %q in:\n%s", want, got)
 		}
+	}
+}
+
+func TestDocLinkResolver(t *testing.T) {
+	for in, want := range map[string]string{
+		"docs/RELEASE-SPEC.md":     "/docs/release-spec",
+		"RELEASE-SPEC.md":          "/docs/release-spec",
+		"./API.md":                 "/docs/api",
+		"/docs/api":                "/docs/api",
+		"#section":                 "#section",
+		"https://example.com/a.md": "https://example.com/a.md",
+		"mailto:x@y.md":            "mailto:x@y.md",
+		"sub/dir/file.md":          "sub/dir/file.md",
+		"plain.txt":                "plain.txt",
+	} {
+		if got := docLinkResolver(in); got != want {
+			t.Errorf("docLinkResolver(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// Relative Markdown links inside a document are rewritten, but a changelog is
+// left alone so it cannot accidentally point at the documentation.
+func TestRenderDocRewritesLinks(t *testing.T) {
+	got := string(renderDoc("see [规范](docs/RELEASE-SPEC.md)"))
+	if !strings.Contains(got, `href="/docs/release-spec"`) {
+		t.Errorf("link was not rewritten:\n%s", got)
+	}
+	changelog := string(RenderMarkdown("see [规范](docs/RELEASE-SPEC.md)"))
+	if strings.Contains(changelog, "href=") {
+		t.Errorf("a changelog link should have been dropped, not rewritten:\n%s", changelog)
 	}
 }
 

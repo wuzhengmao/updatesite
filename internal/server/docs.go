@@ -12,7 +12,7 @@ import (
 
 // docOrder lists the documents that should be shown first, in order. Any other
 // Markdown file in the docs directory is appended alphabetically.
-var docOrder = []string{"RELEASE-SPEC.md", "API.md"}
+var docOrder = []string{"RELEASE-SPEC.md", "UPLOAD.md", "API.md"}
 
 // doc is one rendered documentation page.
 type doc struct {
@@ -70,7 +70,7 @@ func loadDocs() ([]*doc, error) {
 			Slug:  slugify(name[:len(name)-3]), // strip ".md"
 			File:  name,
 			Title: docTitle(text, name),
-			Body:  RenderMarkdown(text),
+			Body:  renderDoc(text),
 		})
 	}
 	return out, nil

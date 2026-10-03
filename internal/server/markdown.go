@@ -38,7 +38,18 @@ var (
 )
 
 // RenderMarkdown converts Markdown text to HTML.
-func RenderMarkdown(src string) template.HTML {
+func RenderMarkdown(src string) template.HTML { return render(src, nil) }
+
+// renderDoc renders documentation, where relative links such as
+// "docs/RELEASE-SPEC.md" are rewritten to their site path so the same file
+// works both on disk and in the browser.
+func renderDoc(src string) template.HTML { return render(src, docLinkResolver) }
+
+// render is the shared implementation. resolve may be nil, in which case links
+// are left exactly as written.
+func render(src string, resolve func(string) string) template.HTML {
+	inline := func(s string) string { return renderInline(s, resolve) }
+
 	src = strings.ReplaceAll(src, "\r\n", "\n")
 	src = strings.ReplaceAll(src, "\r", "\n")
 	lines := strings.Split(src, "\n")
@@ -120,7 +131,7 @@ func RenderMarkdown(src string) template.HTML {
 		}
 		if isTableStart(lines, i) {
 			flushAll()
-			i = writeTable(&b, lines, i)
+			i = writeTable(&b, lines, i, inline)
 			continue
 		}
 		if m := reBullet.FindStringSubmatch(line); m != nil {
@@ -172,7 +183,7 @@ func isTableStart(lines []string, i int) bool {
 }
 
 // writeTable renders a table and returns the index of its last consumed line.
-func writeTable(b *strings.Builder, lines []string, start int) int {
+func writeTable(b *strings.Builder, lines []string, start int, inline func(string) string) int {
 	head := splitRow(lines[start])
 	aligns := parseAligns(lines[start+1])
 
@@ -256,9 +267,10 @@ func alignAttr(aligns []string, col int) string {
 
 // ------------------------------------------------------------------- inline
 
-// inline renders one line of Markdown. The input is escaped first, so every
-// transformation below operates on text that can no longer break out of HTML.
-func inline(s string) string {
+// renderInline renders one line of Markdown. The input is escaped first, so
+// every transformation below operates on text that can no longer break out of
+// HTML.
+func renderInline(s string, resolve func(string) string) string {
 	s = html.EscapeString(s)
 
 	var spans []string
@@ -269,11 +281,11 @@ func inline(s string) string {
 
 	s = reMDLink.ReplaceAllStringFunc(s, func(m string) string {
 		g := reMDLink.FindStringSubmatch(m)
-		return link(g[1], g[2])
+		return link(g[1], g[2], resolve)
 	})
 	s = reAutoLink.ReplaceAllStringFunc(s, func(m string) string {
 		g := reAutoLink.FindStringSubmatch(m)
-		return g[1] + link(g[2], g[2])
+		return g[1] + link(g[2], g[2], nil)
 	})
 	s = reBold.ReplaceAllStringFunc(s, func(m string) string {
 		g := reBold.FindStringSubmatch(m)
@@ -301,12 +313,32 @@ func inline(s string) string {
 	return s
 }
 
-// link builds an anchor, dropping targets with a dangerous scheme.
-func link(text, href string) string {
+// link builds an anchor, dropping targets with a dangerous scheme. The resolver
+// is applied first so a rewritten target is still subject to the scheme check.
+func link(text, href string, resolve func(string) string) string {
+	if resolve != nil {
+		href = resolve(href)
+	}
 	if !safeURL(href) {
 		return text
 	}
 	return `<a href="` + href + `" rel="noopener noreferrer">` + text + `</a>`
+}
+
+// docLinkResolver maps a relative link to another Markdown file onto its site
+// path: "docs/RELEASE-SPEC.md" and "RELEASE-SPEC.md" both become
+// "/docs/release-spec". Anything else is left untouched.
+func docLinkResolver(href string) string {
+	if href == "" || strings.HasPrefix(href, "/") || strings.HasPrefix(href, "#") ||
+		strings.Contains(href, "://") || strings.HasPrefix(href, "mailto:") {
+		return href
+	}
+	clean := strings.TrimPrefix(href, "./")
+	clean = strings.TrimPrefix(clean, "docs/")
+	if !hasSuffixFold(clean, ".md") || strings.Contains(clean, "/") {
+		return href
+	}
+	return "/docs/" + slugify(clean[:len(clean)-3])
 }
 
 // safeURL allows only absolute http(s), mailto and same-site targets.

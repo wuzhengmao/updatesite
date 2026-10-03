@@ -256,7 +256,7 @@ func (s *Scanner) scanRelease(app *App, dir, version string, snap *Snapshot, pen
 		return rel, err
 	}
 	for _, f := range files {
-		if skipArtifact(dir, f) {
+		if IsMetadataFile(f) {
 			continue
 		}
 		if declared[f] {
@@ -398,9 +398,10 @@ func listFiles(dir string, snap *Snapshot, label string) ([]string, error) {
 	return out, err
 }
 
-// skipArtifact reports whether a relative file is metadata rather than a
-// downloadable artifact.
-func skipArtifact(dir, rel string) bool {
+// IsMetadataFile reports whether a relative file name is release metadata
+// rather than a downloadable artifact. It is exported so the upload path can
+// apply exactly the same rule when validating an archive.
+func IsMetadataFile(rel string) bool {
 	base := filepath.Base(rel)
 	lower := strings.ToLower(base)
 	if lower == appMetaFile || lower == releaseMetaFile || lower == publishedFile {
