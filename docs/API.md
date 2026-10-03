@@ -327,21 +327,22 @@ curl -fS -X POST \
 
 ```json
 {
-  "app": "mti-sip-phone",
+  "app": "demo-desktop",
   "metadata": {
-    "id": "mti-sip-phone",
-    "name": "mti-sip-phone 软电话",
-    "summary": "跨平台 SIP 软电话",
+    "id": "demo-desktop",
+    "name": "演示桌面客户端",
+    "summary": "用来展示发布目录结构的示例应用",
+    "description": "这是 **示例应用**，用于演示更新站点的目录结构与元数据格式。",
     "vendor": "MTI",
     "license": "Proprietary",
-    "tags": ["sip", "softphone"],
+    "tags": ["desktop", "demo"],
     "channel": "stable",
     "icon": "icon.svg",
     "order": 10,
     "hidden": false
   },
-  "icon": {"file": "icon.svg", "url": "https://…/a/mti-sip-phone/icon"},
-  "iconUrl": "https://…/a/mti-sip-phone/icon"
+  "icon": {"file": "icon.svg", "url": "https://…/a/demo-desktop/icon"},
+  "iconUrl": "https://…/a/demo-desktop/icon"
 }
 ```
 
@@ -355,16 +356,17 @@ curl -fS -X PUT \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-        "name": "mti-sip-phone 软电话",
-        "summary": "跨平台 SIP 软电话",
+        "name": "演示桌面客户端",
+        "summary": "用来展示发布目录结构的示例应用",
+        "description": "这是 **示例应用**，用于演示目录结构与元数据格式。",
         "vendor": "MTI",
         "license": "Proprietary",
-        "homepage": "https://example.com/products/sip-phone",
-        "tags": ["sip", "softphone", "voip"],
+        "homepage": "https://example.com/demo",
+        "tags": ["desktop", "demo"],
         "channel": "stable",
         "order": 10
       }' \
-  https://update.example.com/api/v1/apps/mti-sip-phone/metadata
+  https://update.example.com/api/v1/apps/demo-desktop/metadata
 ```
 
 | 字段 | 类型 | 说明 |
@@ -401,7 +403,7 @@ curl -fS -X PUT \
 curl -fS -X PUT \
   -H "Authorization: Bearer $TOKEN" \
   --data-binary @icon.png \
-  https://update.example.com/api/v1/apps/mti-sip-phone/icon
+  https://update.example.com/api/v1/apps/demo-desktop/icon
 ```
 
 - 接受 PNG、JPEG、SVG、WebP，最大 2 MB
