@@ -171,7 +171,7 @@ curl "http://localhost:8080/api/v1/apps/myapp/check?version=1.0.0&os=windows&arc
 
 | 变量 | 默认 | 说明 |
 | --- | --- | --- |
-| `ADDR` | `:8080` | 监听地址 |
+| `ADDR` | 容器内 `:80`，直接运行 `:8080` | HTTP 监听地址 |
 | `DATA_DIR` | `/data` | 归档根目录，其下的 `apps/` 存放应用 |
 | `CACHE_DIR` | `/var/cache/updatesite` | 校验和缓存位置 |
 | `SCAN_INTERVAL` | `15s` | 扫描周期 |
@@ -183,6 +183,10 @@ curl "http://localhost:8080/api/v1/apps/myapp/check?version=1.0.0&os=windows&arc
 | `LOG_REQUESTS` | `true` | 是否打印访问日志 |
 | `UPLOAD_ENABLED` | `true` | 是否开放上传接口与上传页面 |
 | `MAX_UPLOAD` | `2GiB` | 单个上传包的大小上限，支持 `512MiB` 这类后缀 |
+| `TLS_ADDR` | `:443` | HTTPS 监听地址，仅在配置了证书时启用 |
+| `TLS_CERT` | — | PEM 证书路径（可含证书链） |
+| `TLS_KEY` | — | 与证书配对的 PEM 私钥路径 |
+| `TLS_REDIRECT` | `false` | 打开后 HTTP 全部 301 到 HTTPS |
 
 ---
 
@@ -252,9 +256,43 @@ make run           # 用 release/apps 目录本地跑起来
 
 ---
 
-## 反向代理
+## HTTPS
 
-站点本身只提供 HTTP。放到公网时在前面加一层 TLS 终止：
+容器同时监听 80 和 443，配置了证书后 443 自动启用 TLS：
+
+```bash
+./scripts/self-signed-cert.sh ./certs      # 测试用自签证书
+TLS_CERT=./certs/server.crt TLS_KEY=./certs/server.key TLS_REDIRECT=true \
+  docker compose up -d --build
+```
+
+在 `docker-compose.yml` 里长期生效的写法是把证书挂进来并打开变量：
+
+```yaml
+    environment:
+      TLS_CERT: "/certs/server.crt"
+      TLS_KEY: "/certs/server.key"
+      TLS_REDIRECT: "true"
+      BASE_URL: "https://update.example.com"
+    volumes:
+      - ./certs:/certs:ro
+```
+
+几点说明：
+
+- 证书和私钥**必须同时配置**，只给一个会记一条警告并保持 HTTP-only
+- TLS 最低版本锁在 1.2
+- 打开 `TLS_REDIRECT` 后 HTTP 请求 301 到 HTTPS，**但 `/api/v1/health` 例外**——
+  否则容器健康检查会被自己重定向走
+- 通过 HTTPS 访问时，API 返回的 `pageUrl` / `url` 自动是 `https://`，
+  走 HTTP 时是 `http://`；固定域名时设 `BASE_URL` 更省事
+- 自签证书浏览器会报警告。生产请用内部 CA 或 Let's Encrypt
+
+不需要内置 TLS、想交给网关终止的话，把 443 的端口映射去掉做纯反代即可。
+
+---
+
+## 反向代理
 
 ```nginx
 location / {
