@@ -22,7 +22,7 @@ services:
       SITE_TITLE: "软件更新中心"
       # SITE_SUBTITLE: "内部发布通道"
       # Absolute URL used in API responses behind a reverse proxy.
-      # BASE_URL: "https://update.example.com"
+      BASE_URL: "https://localhost:8443"
       # Set a token to protect POST /api/v1/rescan.
       # RESCAN_TOKEN: "change-me"
       SCAN_INTERVAL: "15s"
@@ -32,14 +32,18 @@ services:
       # Largest accepted upload. Accepts plain bytes or a suffix.
       # MAX_UPLOAD: "2GiB"
 
-      # HTTPS. Uncomment both lines and mount the certificates below to serve
-      # TLS on 443 as well as plain HTTP on 80. TLS_REDIRECT sends every plain
-      # HTTP visitor to HTTPS (the /api/v1/health probe stays on HTTP).
-      # TLS_CERT: "/certs/server.crt"
-      # TLS_KEY: "/certs/server.key"
-      # TLS_REDIRECT: "true"
-      # Absolute URL used in API responses; set it once TLS is on.
-      # BASE_URL: "https://update.example.com"
+      # HTTPS on 443, alongside plain HTTP on 80. Generate the certificate
+      # pair with ./scripts/self-signed-cert.sh (or drop in real ones).
+      # If the files are missing the site still starts, logs why, and serves
+      # plain HTTP only — it will not lock you out.
+      TLS_CERT: "/certs/server.crt"
+      TLS_KEY: "/certs/server.key"
+      # Send plain HTTP visitors to HTTPS. /api/v1/health is exempt so the
+      # container health probe keeps working.
+      TLS_REDIRECT: "true"
+      # Absolute URL used in API responses. Set it to your real address so
+      # links are correct behind a proxy or on a non standard port.
+      BASE_URL: "https://localhost:8443"
 
     volumes:
       # The archive. Publish either by dropping <app-id>/<version>/ directories
@@ -52,9 +56,9 @@ services:
       - ./release/apps:/data/apps
       # Persists computed sha256 digests across restarts.
       - updatesite-cache:/var/cache/updatesite
-      # TLS certificates, mounted read-only. Generate a pair with
-      # scripts/self-signed-cert.sh for testing, or drop in real ones.
-      # - ./certs:/certs:ro
+      # TLS certificates, mounted read-only.
+      # Run ./scripts/self-signed-cert.sh to create them for testing.
+      - ./certs:/certs:ro
 
     # The container runs as root so that archives with restrictive permissions
     # mount without surprises. The image has no shell and the archive is mounted

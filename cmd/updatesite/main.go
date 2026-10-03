@@ -71,24 +71,43 @@ func serve() {
 	go idx.Run(ctx, cfg.ScanInterval)
 	go watchHup(ctx, idx)
 
-	httpSrv := newHTTPServer(cfg.Addr, srv.Handler())
-	if cfg.TLSEnabled() && cfg.TLSRedirect {
-		// Plain HTTP only forwards visitors to the secure listener.
-		httpSrv.Handler = server.RedirectToTLS(httpSrv.Handler, cfg)
+	// Settle whether HTTPS can run *before* wiring the HTTP handler: a
+	// redirect to a port that never came up would make the site unreachable.
+	// Loading the pair up front also turns a bad path or a mismatched key into
+	// a plain message instead of a crash.
+	var tlsPair *tls.Certificate
+	if cfg.TLSEnabled() {
+		pair, err := tls.LoadX509KeyPair(cfg.TLSCert, cfg.TLSKey)
+		if err != nil {
+			log.Printf("TLS is configured but unusable, serving plain HTTP only: %v", err)
+			log.Printf("  TLS_CERT=%s", cfg.TLSCert)
+			log.Printf("  TLS_KEY=%s", cfg.TLSKey)
+		} else {
+			tlsPair = &pair
+		}
 	}
+
+	httpHandler := srv.Handler()
+	redirect := tlsPair != nil && cfg.TLSRedirect
+	if redirect {
+		httpHandler = server.RedirectToTLS(httpHandler, cfg)
+	}
+
+	httpSrv := newHTTPServer(cfg.Addr, httpHandler)
 	servers := []*http.Server{httpSrv}
-	listen(httpSrv, "", "")
+	listen(httpSrv, false)
 	log.Printf("listening on %s (data %s, cache %s, rescan every %s, upload %v)",
 		cfg.Addr, cfg.DataDir, cfg.CacheDir, cfg.ScanInterval, cfg.UploadEnabled)
 
-	if cfg.TLSEnabled() {
+	if tlsPair != nil {
 		tlsSrv := newHTTPServer(cfg.TLSAddr, srv.Handler())
+		tlsSrv.TLSConfig.Certificates = []tls.Certificate{*tlsPair}
 		servers = append(servers, tlsSrv)
-		listen(tlsSrv, cfg.TLSCert, cfg.TLSKey)
-		log.Printf("listening on %s with TLS (certificate %s, redirect %v)",
-			cfg.TLSAddr, cfg.TLSCert, cfg.TLSRedirect)
+		listen(tlsSrv, true)
+		log.Printf("listening on %s with TLS (certificate %s, %d cert(s) in the chain, redirect to HTTPS %v)",
+			cfg.TLSAddr, cfg.TLSCert, len(tlsPair.Certificate), redirect)
 	} else if cfg.TLSRedirect {
-		log.Printf("TLS_REDIRECT is on but no certificate is configured, plain HTTP is served as is")
+		log.Printf("TLS_REDIRECT is ignored because HTTPS did not start")
 	}
 
 	<-ctx.Done()
@@ -116,11 +135,14 @@ func newHTTPServer(addr string, handler http.Handler) *http.Server {
 
 // listen starts a server in the background. A failure to bind is fatal: running
 // without the port the deployment asked for is worse than stopping.
-func listen(s *http.Server, cert, key string) {
+//
+// The certificate is already in TLSConfig, so ListenAndServeTLS is called with
+// empty file names.
+func listen(s *http.Server, useTLS bool) {
 	go func() {
 		var err error
-		if cert != "" {
-			err = s.ListenAndServeTLS(cert, key)
+		if useTLS {
+			err = s.ListenAndServeTLS("", "")
 		} else {
 			err = s.ListenAndServe()
 		}
