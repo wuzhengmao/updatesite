@@ -300,9 +300,12 @@ func formatBuildCommit(raw string) string {
 	return strings.TrimSpace(raw)
 }
 
-// formatBuildTime turns the link-time stamp into something readable. The value
-// is whatever -ldflags supplied, so an unparseable one is shown as is and a
-// placeholder is dropped entirely.
+// formatBuildTime turns the link-time stamp into something readable, in the
+// server's local time zone. The stamp itself is stored as UTC so builds are
+// comparable; only the display is localised.
+//
+// The offset is rendered numerically rather than as an abbreviation: "CST" alone
+// is China Standard Time, Central Standard Time and Cuba Standard Time.
 func formatBuildTime(raw string) string {
 	raw = strings.TrimSpace(raw)
 	switch raw {
@@ -311,7 +314,7 @@ func formatBuildTime(raw string) string {
 	}
 	for _, layout := range []string{time.RFC3339, "2006-01-02T15:04:05", "2006-01-02"} {
 		if t, err := time.Parse(layout, raw); err == nil {
-			return t.UTC().Format("2006-01-02 15:04 MST")
+			return t.Local().Format("2006-01-02 15:04 -07:00")
 		}
 	}
 	return raw

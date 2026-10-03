@@ -20,6 +20,10 @@ import (
 	"syscall"
 	"time"
 
+	// The scratch image ships no zoneinfo, so the time zone database is embedded
+	// and TZ can take effect.
+	_ "time/tzdata"
+
 	"github.com/mti/updatesite/internal/buildinfo"
 	"github.com/mti/updatesite/internal/config"
 	"github.com/mti/updatesite/internal/index"

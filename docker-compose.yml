@@ -21,6 +21,10 @@ services:
     environment:
       SITE_TITLE: "软件更新中心"
       # SITE_SUBTITLE: "内部发布通道"
+      # Time zone used for the build stamp in the footer and for the dates shown
+      # on the site. The time zone database is embedded in the binary, so any
+      # IANA name works. Defaults to UTC when unset.
+      TZ: "Asia/Shanghai"
       # The address visitors actually use. It is what API responses and the
       # HTTP-to-HTTPS redirect point at, so it must match the host ports below:
       # a container cannot see how its ports were mapped.
