@@ -8,9 +8,11 @@
 /data/
 /cache/
 
-# release/apps is the default archive mount point and ships with placeholder
-# demo files. If you keep real installers there, uncomment the next line.
-# /release/apps/
+# The archive mount point. It holds real releases, which are deployment
+# artefacts rather than source: installers are large and often proprietary, so
+# they stay out of the repository. Placeholder demo content lives in
+# examples/apps instead.
+/release/apps/
 
 # Editor
 .vscode/
@@ -20,3 +22,6 @@
 
 # TLS certificates, never commit these
 /certs/
+
+# Local compose overrides, may hold secrets
+.env

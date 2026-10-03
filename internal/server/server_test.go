@@ -23,6 +23,9 @@ import (
 	"github.com/mti/updatesite/internal/token"
 )
 
+// uploadSecret is the deployment secret the upload tests mint tokens from.
+const uploadSecret = "test-upload-secret-not-a-real-one"
+
 // zipBytes builds a zip archive in memory for upload tests.
 func zipBytes(t *testing.T, entries map[string]string) []byte {
 	t.Helper()
@@ -86,7 +89,7 @@ func TestUploadRequiresToken(t *testing.T) {
 		t.Errorf("with a wrong token: status %d, want 401", code)
 	}
 	// A token minted for a different application must not work either.
-	if code, _ := postMultipart(t, url, archive, map[string]string{"version": "1.0.0"}, token.For("otherapp")); code != http.StatusUnauthorized {
+	if code, _ := postMultipart(t, url, archive, map[string]string{"version": "1.0.0"}, token.For(uploadSecret, "otherapp")); code != http.StatusUnauthorized {
 		t.Errorf("with another app's token: status %d, want 401", code)
 	}
 }
@@ -100,7 +103,7 @@ func TestUploadPublishesRelease(t *testing.T) {
 		"App-1.0.0-linux-arm64.tar.gz": "linux build",
 		"CHANGELOG.md":                 "## 1.0.0\n\n- 首个版本",
 		"release.json":                 `{"channel":"stable","title":"首发"}`,
-	}), map[string]string{"version": "1.0.0"}, token.For(appID))
+	}), map[string]string{"version": "1.0.0"}, token.For(uploadSecret, appID))
 
 	if code != http.StatusCreated {
 		t.Fatalf("status = %d, want 201: %v", code, body)
@@ -148,7 +151,7 @@ func TestUploadRawBody(t *testing.T) {
 		ts.URL+"/api/v1/apps/"+appID+"/upload?version=2.0.0&filename=release.zip",
 		bytes.NewReader(archive))
 	req.Header.Set("Content-Type", "application/zip")
-	req.Header.Set("X-Upload-Token", token.For(appID))
+	req.Header.Set("X-Upload-Token", token.For(uploadSecret, appID))
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -170,7 +173,7 @@ func TestUploadInfersVersionFromDirectory(t *testing.T) {
 	code, body := postMultipart(t, ts.URL+"/api/v1/apps/"+appID+"/upload", zipBytes(t, map[string]string{
 		"myapp-3.2.1/App-3.2.1-windows-x64.exe": "win",
 		"myapp-3.2.1/CHANGELOG.md":              "notes",
-	}), nil, token.For(appID))
+	}), nil, token.For(uploadSecret, appID))
 	if code != http.StatusCreated {
 		t.Fatalf("status = %d, want 201: %v", code, body)
 	}
@@ -186,7 +189,7 @@ func TestUploadRejectsBadArchives(t *testing.T) {
 	ts, _ := newSite(t)
 	appID := "badapp"
 	url := ts.URL + "/api/v1/apps/" + appID + "/upload"
-	tok := token.For(appID)
+	tok := token.For(uploadSecret, appID)
 
 	cases := []struct {
 		name  string
@@ -218,7 +221,7 @@ func TestUploadDisabled(t *testing.T) {
 	cfg := config.Config{
 		DataDir: dir, CacheDir: filepath.Join(dir, "cache"),
 		ScanInterval: time.Minute, SiteTitle: "T", CORSOrigin: "*",
-		UploadEnabled: false, MaxUpload: 1 << 20,
+		UploadEnabled: false, UploadSecret: uploadSecret, MaxUpload: 1 << 20,
 	}
 	idx := index.New(cfg.DataDir, cfg.CacheDir)
 	idx.Scan()
@@ -231,7 +234,7 @@ func TestUploadDisabled(t *testing.T) {
 
 	archive := zipBytes(t, map[string]string{"App-1.0.0-windows-x64.exe": "win"})
 	code, _ := postMultipart(t, off.URL+"/api/v1/apps/disabledapp/upload", archive,
-		map[string]string{"version": "1.0.0"}, token.For("disabledapp"))
+		map[string]string{"version": "1.0.0"}, token.For(uploadSecret, "disabledapp"))
 	if code != http.StatusForbidden {
 		t.Errorf("status = %d, want 403 when uploads are disabled", code)
 	}
@@ -313,6 +316,7 @@ func newSite(t *testing.T) (*httptest.Server, string) {
 		SiteTitle:     "Test Update Site",
 		CORSOrigin:    "*",
 		UploadEnabled: true,
+		UploadSecret:  uploadSecret,
 		MaxUpload:     8 << 20,
 	}
 	idx := index.New(cfg.DataDir, cfg.CacheDir)

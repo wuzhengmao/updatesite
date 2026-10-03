@@ -12,14 +12,14 @@ LDFLAGS := -s -w \
 .PHONY: help run build test vet fmt image push clean
 
 help:
-	@echo "make run     - run locally against ./release/apps"
+	@echo "make run     - run locally against ./examples/apps"
 	@echo "make build   - build the binary into ./dist"
 	@echo "make test    - run the test suite"
 	@echo "make image   - build the amd64/arm64 image (no push)"
 	@echo "make push    - build and push the multi-arch image"
 
 run:
-	DATA_DIR=./release CACHE_DIR=./cache ADDR=:8080 SCAN_INTERVAL=5s \
+	DATA_DIR=./examples CACHE_DIR=./cache ADDR=:8080 SCAN_INTERVAL=5s \
 		go run -ldflags "$(LDFLAGS)" ./cmd/updatesite
 
 build:

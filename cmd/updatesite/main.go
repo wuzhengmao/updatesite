@@ -159,17 +159,23 @@ func listen(s *http.Server, useTLS bool) {
 // application id; the standard flag package stops at the first positional.
 func tokenCommand(args []string) int {
 	var (
-		baseURL string
-		quiet   bool
-		list    bool
-		appID   string
+		baseURL   string
+		quiet     bool
+		list      bool
+		genSecret bool
+		appID     string
 	)
 	usage := func() {
 		fmt.Fprintln(os.Stderr, "用法: updatesite token [-url https://站点地址] [-q] <应用ID>")
 		fmt.Fprintln(os.Stderr, "      updatesite token --list [-q]")
-		fmt.Fprintln(os.Stderr, "  -q      只输出令牌本身，便于脚本使用")
-		fmt.Fprintln(os.Stderr, "  -url    站点地址，用于打印可直接粘贴的上传命令")
-		fmt.Fprintln(os.Stderr, "  -list   列出归档目录里所有应用的令牌")
+		fmt.Fprintln(os.Stderr, "      updatesite token -gen-secret")
+		fmt.Fprintln(os.Stderr, "  -q           只输出令牌本身，便于脚本使用")
+		fmt.Fprintln(os.Stderr, "  -url         站点地址，用于打印可直接粘贴的上传命令")
+		fmt.Fprintln(os.Stderr, "  -list        列出归档目录里所有应用的令牌")
+		fmt.Fprintln(os.Stderr, "  -gen-secret  生成一个新的 UPLOAD_SECRET")
+		fmt.Fprintln(os.Stderr)
+		fmt.Fprintln(os.Stderr, "令牌由 UPLOAD_SECRET 与应用 ID 共同推导；各环境使用同一个密钥，")
+		fmt.Fprintln(os.Stderr, "同一个应用的令牌就处处相同。")
 	}
 
 	for i := 0; i < len(args); i++ {
@@ -178,6 +184,8 @@ func tokenCommand(args []string) int {
 			quiet = true
 		case a == "-list", a == "--list":
 			list = true
+		case a == "-gen-secret", a == "--gen-secret":
+			genSecret = true
 		case a == "-url", a == "--url":
 			if i+1 >= len(args) {
 				fmt.Fprintln(os.Stderr, "-url 需要一个值")
@@ -203,22 +211,50 @@ func tokenCommand(args []string) int {
 		}
 	}
 
+	if genSecret {
+		secret, err := token.NewSecret()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "无法生成密钥: %v\n", err)
+			return 1
+		}
+		if quiet {
+			fmt.Println(secret)
+			return 0
+		}
+		fmt.Printf("新的上传密钥:\n\n  %s\n\n", secret)
+		fmt.Println("把它配置到站点上（各环境用同一个值，同一应用的令牌就处处相同）：")
+		fmt.Println()
+		fmt.Println("  docker-compose.yml  →  UPLOAD_SECRET: \"" + secret + "\"")
+		fmt.Println("  或   UPLOAD_SECRET=" + secret + " docker compose up -d")
+		fmt.Println()
+		fmt.Println("这是唯一的副本，请自行保存；换掉它会让已发出的令牌全部失效。")
+		return 0
+	}
+
+	secret := strings.TrimSpace(os.Getenv("UPLOAD_SECRET"))
+	if secret == "" {
+		fmt.Fprintln(os.Stderr, "未设置 UPLOAD_SECRET，无法推导令牌。")
+		fmt.Fprintln(os.Stderr, "先生成一个：updatesite token -gen-secret")
+		fmt.Fprintln(os.Stderr, "再带上它运行：UPLOAD_SECRET=<密钥> updatesite token <应用ID>")
+		return 2
+	}
+
 	if list {
-		return listTokens(quiet)
+		return listTokens(quiet, secret)
 	}
 	if appID == "" {
 		usage()
 		return 2
 	}
 	if quiet {
-		fmt.Println(token.For(appID))
+		fmt.Println(token.For(secret, appID))
 		return 0
 	}
-	printToken(appID, token.For(appID), baseURL)
+	printToken(appID, token.For(secret, appID), baseURL)
 	return 0
 }
 
-func listTokens(quiet bool) int {
+func listTokens(quiet bool, secret string) int {
 	dir := filepath.Join(config.Load().DataDir, "apps")
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -238,10 +274,10 @@ func listTokens(quiet bool) int {
 	sort.Strings(ids)
 	for _, id := range ids {
 		if quiet {
-			fmt.Printf("%s\t%s\n", id, token.For(id))
+			fmt.Printf("%s\t%s\n", id, token.For(secret, id))
 			continue
 		}
-		fmt.Printf("%-24s %s\n", id, token.For(id))
+		fmt.Printf("%-24s %s\n", id, token.For(secret, id))
 	}
 	return 0
 }

@@ -29,6 +29,10 @@ services:
       # RESCAN_TOKEN: "change-me"
       SCAN_INTERVAL: "15s"
       # CORS_ORIGIN: "*"
+      # Secret the upload tokens are derived from. Without it the upload
+      # endpoint and page are switched off entirely. Generate one with
+      # "updatesite token -gen-secret" and keep it out of version control.
+      UPLOAD_SECRET: "${UPLOAD_SECRET:-}"
       # Set to "false" to remove the upload endpoint and page entirely.
       # UPLOAD_ENABLED: "true"
       # Largest accepted upload. Accepts plain bytes or a suffix.

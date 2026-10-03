@@ -23,8 +23,9 @@ type Config struct {
 	RescanToken  string // when set, POST /api/v1/rescan requires this bearer token
 	LogRequests  bool
 
-	UploadEnabled bool  // expose the release upload endpoint
-	MaxUpload     int64 // largest accepted upload, in bytes
+	UploadEnabled bool   // expose the release upload endpoint
+	UploadSecret  string // deployment secret the upload tokens are derived from
+	MaxUpload     int64  // largest accepted upload, in bytes
 
 	TLSAddr     string // HTTPS listen address, used only when a certificate is set
 	TLSCert     string // path to a PEM certificate (or a full chain)
@@ -52,6 +53,7 @@ func Load() Config {
 		LogRequests:  envBool("LOG_REQUESTS", true),
 
 		UploadEnabled: envBool("UPLOAD_ENABLED", true),
+		UploadSecret:  env("UPLOAD_SECRET", ""),
 		MaxUpload:     envBytes("MAX_UPLOAD", 2<<30),
 
 		TLSAddr:     env("TLS_ADDR", ":443"),
@@ -62,6 +64,13 @@ func Load() Config {
 	if (c.TLSCert == "") != (c.TLSKey == "") {
 		log.Printf("config: TLS_CERT and TLS_KEY must be set together, HTTPS will stay off")
 		c.TLSCert, c.TLSKey = "", ""
+	}
+	// Uploads are impossible without a secret to derive tokens from, so say so
+	// once and turn the feature off rather than rejecting every request.
+	if c.UploadEnabled && c.UploadSecret == "" {
+		log.Printf("config: uploads are disabled because UPLOAD_SECRET is not set; " +
+			"generate one with \"updatesite token -gen-secret\"")
+		c.UploadEnabled = false
 	}
 	if c.MaxUpload < 1<<20 {
 		log.Printf("config: MAX_UPLOAD %d is too small, using 1MiB", c.MaxUpload)

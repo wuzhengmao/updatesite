@@ -27,11 +27,16 @@ docker compose up -d --build
 VERSION=1.2.0 COMMIT=$(git rev-parse --short HEAD) docker compose up -d --build
 ```
 
-打开 <http://localhost:8080>，会看到 `release/apps` 里的两个示例应用。
+`release/apps` 就是**归档目录**，也是默认的挂载点。它**不入版本库**——
+里面放的是真实安装包，体积大且多为专有产物。想先看看站点长什么样，
+把演示数据拷进去：
 
-`release/apps` 就是**归档目录**，也是默认的挂载点。往里面丢
-`<应用ID>/<版本号>/` 目录即可发布。里面的示例文件可以直接删掉，
-换成自己的内容；生产环境一般把它指到别处，编辑 `docker-compose.yml`：
+```bash
+mkdir -p release/apps && cp -r examples/apps/* release/apps/
+```
+
+往归档目录丢 `<应用ID>/<版本号>/` 目录即可发布。生产环境一般把它指到别处，
+编辑 `docker-compose.yml`：
 
 ```yaml
 volumes:
@@ -47,13 +52,13 @@ go run ./cmd/updatesite        # 默认读取 /data，Windows 上请设置 DATA_
 或者直接用仓库里的归档目录：
 
 ```bash
-DATA_DIR=./release CACHE_DIR=./cache go run ./cmd/updatesite
+DATA_DIR=./examples CACHE_DIR=./cache go run ./cmd/updatesite
 ```
 
 Windows PowerShell：
 
 ```powershell
-$env:DATA_DIR="./release"; $env:CACHE_DIR="./cache"; go run ./cmd/updatesite
+$env:DATA_DIR="./examples"; $env:CACHE_DIR="./cache"; go run ./cmd/updatesite
 ```
 
 ---
@@ -99,11 +104,20 @@ curl -X POST http://localhost:8080/api/v1/rescan
 站点会自动识别归档；识别不出来也不会出错，只是需要手动用 `release.json` 声明。
 
 **用上传接口发布**：把同样的内容打成 zip 或 tar.gz 上传，站点自动解包归档，
-同名版本整体替换。先让管理员生成令牌：
+同名版本整体替换。上传默认是关的，先配一个部署密钥：
 
 ```bash
-docker exec updatesite updatesite token myapp   # 令牌只由应用 ID 推导，任何环境都相同
+updatesite token -gen-secret            # 生成一个 UPLOAD_SECRET
 ```
+
+把它写进 `.env`（该文件不入库）并重启，然后算令牌：
+
+```bash
+docker exec updatesite updatesite token myapp
+```
+
+令牌由「部署密钥 + 应用 ID」推导。**各环境用同一个密钥，同一应用的令牌就处处相同**，
+所以管理员仍然只需要算一次。换个密钥会让已发出的令牌全部失效。
 
 开发人员拿到令牌后：
 
@@ -182,6 +196,7 @@ curl "http://localhost:8080/api/v1/apps/myapp/check?version=1.0.0&os=windows&arc
 | `RESCAN_TOKEN` | — | 设置后 `POST /api/v1/rescan` 需要 Bearer 令牌 |
 | `LOG_REQUESTS` | `true` | 是否打印访问日志 |
 | `UPLOAD_ENABLED` | `true` | 是否开放上传接口与上传页面 |
+| `UPLOAD_SECRET` | — | **未设置则上传功能完全关闭**；令牌由它与应用 ID 共同推导 |
 | `MAX_UPLOAD` | `2GiB` | 单个上传包的大小上限，支持 `512MiB` 这类后缀 |
 | `TLS_ADDR` | `:443` | HTTPS 监听地址，仅在配置了证书时启用 |
 | `TLS_CERT` | — | PEM 证书路径（可含证书链） |
@@ -229,7 +244,7 @@ cmd/updatesite/        程序入口；含 token 子命令与 -healthcheck 自检
 internal/config/       环境变量配置
 internal/semver/       宽松语义化版本解析与比较
 internal/index/        归档扫描、平台识别、校验和缓存、快照发布
-internal/token/        由应用 ID 推导上传令牌
+internal/token/        由部署密钥与应用 ID 推导上传令牌
 internal/upload/       压缩包解包、版本推断、原子替换
 internal/server/       HTTP 路由、JSON API、上传、下载、网页与模板
 internal/buildinfo/    构建期注入的版本信息
@@ -239,7 +254,13 @@ docs/                  文档，同时被嵌入二进制并在 /docs 提供浏�
 ├── RELEASE-SPEC.md    发布规范
 ├── UPLOAD.md          上传发布说明
 └── API.md             API 文档
+examples/apps/         演示归档（占位文件，入库）
+release/apps/          真实归档目录（挂载点，不入库）
 ```
+
+> `release/apps` 被 `.gitignore` 排除：里面是真实安装包，体积大且多为专有产物，
+> 属于部署产物而非源码。想在本机看到站点内容，把 `examples/apps/*` 拷进去即可。
+> `.env` 同样不入库，因为它可能存着 `UPLOAD_SECRET`；从 `.env.example` 复制一份开始。
 
 ---
 
@@ -248,7 +269,7 @@ docs/                  文档，同时被嵌入二进制并在 /docs 提供浏�
 ```bash
 go test ./...      # 测试
 go vet ./...       # 静态检查
-make run           # 用 release/apps 目录本地跑起来
+make run           # 用 examples/apps 目录本地跑起来
 ```
 
 平台识别、版本比较、发布目录解析、HTTP 接口都有测试覆盖，

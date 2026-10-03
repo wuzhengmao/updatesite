@@ -49,7 +49,8 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	if !s.authorizeUpload(r, appID) {
 		s.writeError(w, r, http.StatusUnauthorized, "unauthorized",
-			"a valid upload token is required; an administrator can print it with: updatesite token %s", appID)
+			"a valid upload token is required; an administrator can print it with: "+
+				"UPLOAD_SECRET=<secret> updatesite token %s", appID)
 		return
 	}
 
@@ -188,7 +189,7 @@ func (s *Server) authorizeUpload(r *http.Request, appID string) bool {
 			got = strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(auth, "Bearer"), "bearer"))
 		}
 	}
-	return got != "" && token.Matches(appID, got)
+	return got != "" && token.Matches(s.cfg.UploadSecret, appID, got)
 }
 
 // detectFormat identifies the archive, preferring the leading bytes over the
