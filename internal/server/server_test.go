@@ -13,6 +13,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -282,7 +283,24 @@ func TestUploadPage(t *testing.T) {
 			t.Errorf("/upload is missing %q", want)
 		}
 	}
+
+	// Every asset URL must carry the content digest. Without it a browser keeps
+	// the stylesheet and script it cached before the upgrade while being served
+	// the new HTML, so the page looks like the update did nothing.
+	for _, want := range []string{
+		"app.css?v=", "app.js?v=", "upload.js?v=", "favicon.svg?v=",
+	} {
+		if !strings.Contains(html, "/static/"+want) {
+			t.Errorf("asset %q is served without a version, so it will be cached stale", want)
+		}
+	}
+	if !reAssetVersion.MatchString(html) {
+		t.Error("asset version query is missing or empty")
+	}
 }
+
+// reAssetVersion matches "/static/<name>?v=<hex>".
+var reAssetVersion = regexp.MustCompile(`/static/[A-Za-z0-9._-]+\?v=[0-9a-f]{8,}`)
 
 // Deleting a version removes exactly that version.
 func TestDeleteRelease(t *testing.T) {

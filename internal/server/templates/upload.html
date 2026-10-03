@@ -153,7 +153,7 @@
     </div>
 
     <div class="field field-wide meta-actions">
-      <button class="btn btn-ghost" type="button" id="meta-load">读取当前信息</button>
+      <button class="btn btn-success" type="button" id="meta-load">读取当前信息</button>
       <button class="btn" type="submit" id="meta-save">保存应用信息</button>
     </div>
   </form>
@@ -237,5 +237,5 @@ curl -fS -X DELETE -H "Authorization: Bearer $TOKEN" \
 curl -fS -X DELETE -H "Authorization: Bearer $TOKEN" \
   "$SITE/api/v1/apps/$APP"</code></pre>
 </section>
-<script src="/static/upload.js" defer></script>
+<script src="/static/upload.js?v={{.Site.Assets}}" defer></script>
 {{template "foot" .}}{{end}}

@@ -3,10 +3,13 @@
 package server
 
 import (
+	"crypto/sha256"
 	"embed"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"io"
 	"io/fs"
 	"log"
 	"net/http"
@@ -22,6 +25,31 @@ import (
 
 //go:embed templates static
 var assets embed.FS
+
+// assetsVersion is a digest of the embedded static files.
+//
+// The templates put it on every asset URL as a query parameter, which is what
+// stops a stale upload.js or app.css from being paired with freshly served
+// HTML. Files in an embedded filesystem have a zero modification time, so
+// there is no Last-Modified for the browser to revalidate against; without a
+// changing URL it simply reuses its cached copy until max-age expires, and an
+// upgrade appears to do nothing.
+var assetsVersion = func() string {
+	h := sha256.New()
+	_ = fs.WalkDir(assets, "static", func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return nil //nolint:nilerr // a partial digest still busts caches
+		}
+		data, err := fs.ReadFile(assets, path)
+		if err != nil {
+			return nil
+		}
+		io.WriteString(h, path)
+		h.Write(data)
+		return nil
+	})
+	return hex.EncodeToString(h.Sum(nil))[:12]
+}()
 
 // Server wires the configuration, the index, the templates and the embedded
 // documentation together.
@@ -188,7 +216,9 @@ func noDirListing(next http.Handler) http.Handler {
 			http.NotFound(w, r)
 			return
 		}
-		w.Header().Set("Cache-Control", "public, max-age=3600")
+		// The URL carries a digest of the file, so a long cache is safe:
+		// change the file and the URL changes with it.
+		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 		next.ServeHTTP(w, r)
 	})
 }
@@ -270,6 +300,7 @@ type siteInfo struct {
 	Title         string
 	Subtitle      string
 	Version       string
+	Assets        string
 	Commit        string
 	BuiltAt       string
 	BaseURL       string
@@ -285,6 +316,7 @@ func (s *Server) site() siteInfo {
 		Title:         s.cfg.SiteTitle,
 		Subtitle:      s.cfg.SiteSubtitle,
 		Version:       buildinfo.Version,
+		Assets:        assetsVersion,
 		Commit:        formatBuildCommit(buildinfo.Commit),
 		BuiltAt:       formatBuildTime(buildinfo.Date),
 		BaseURL:       s.cfg.BaseURL,

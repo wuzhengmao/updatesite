@@ -11,6 +11,8 @@
   --warn-fg: #9a5b00;
   --danger-bg: #fdecec;
   --danger-fg: #b42318;
+  --success-bg: #e6f4ea;
+  --success-fg: #1a7f37;
   --radius: 12px;
   --radius-sm: 7px;
   --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
@@ -30,6 +32,8 @@
     --warn-fg: #f0b95b;
     --danger-bg: #3a1a1a;
     --danger-fg: #f28b82;
+    --success-bg: #12301c;
+    --success-fg: #3fb950;
   }
 }
 
@@ -513,6 +517,13 @@ table.files tr:hover td { background: var(--surface-2); }
 }
 .btn-ghost:hover { border-color: var(--accent); background: var(--accent-soft); }
 
+/* Action colours: green loads, blue saves, red destroys. */
+.btn-success {
+  background: var(--success-fg);
+  color: #fff;
+}
+.btn-success:hover { filter: brightness(1.1); }
+
 /* Destructive actions. */
 .btn-danger {
   background: var(--danger-fg);
@@ -573,7 +584,7 @@ table.files tr:hover td { background: var(--surface-2); }
   max-height: 22rem;
   overflow: auto;
 }
-.upload-result.ok { border-color: #1a7f37; }
+.upload-result.ok { border-color: var(--success-fg); }
 .upload-result.fail { border-color: #b42318; }
 
 .numbered { margin: 0 0 .7rem; padding-left: 1.4rem; font-size: .9rem; }
