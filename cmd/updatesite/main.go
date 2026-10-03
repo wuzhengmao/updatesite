@@ -7,6 +7,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"log"
@@ -70,30 +71,63 @@ func serve() {
 	go idx.Run(ctx, cfg.ScanInterval)
 	go watchHup(ctx, idx)
 
-	httpSrv := &http.Server{
-		Addr:              cfg.Addr,
-		Handler:           srv.Handler(),
-		ReadHeaderTimeout: 10 * time.Second,
-		IdleTimeout:       120 * time.Second,
+	httpSrv := newHTTPServer(cfg.Addr, srv.Handler())
+	if cfg.TLSEnabled() && cfg.TLSRedirect {
+		// Plain HTTP only forwards visitors to the secure listener.
+		httpSrv.Handler = server.RedirectToTLS(httpSrv.Handler, cfg)
 	}
+	servers := []*http.Server{httpSrv}
+	listen(httpSrv, "", "")
+	log.Printf("listening on %s (data %s, cache %s, rescan every %s, upload %v)",
+		cfg.Addr, cfg.DataDir, cfg.CacheDir, cfg.ScanInterval, cfg.UploadEnabled)
 
-	go func() {
-		log.Printf("listening on %s (data %s, cache %s, rescan every %s, upload %v)",
-			cfg.Addr, cfg.DataDir, cfg.CacheDir, cfg.ScanInterval, cfg.UploadEnabled)
-		if err := httpSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Fatalf("http server: %v", err)
-		}
-	}()
+	if cfg.TLSEnabled() {
+		tlsSrv := newHTTPServer(cfg.TLSAddr, srv.Handler())
+		servers = append(servers, tlsSrv)
+		listen(tlsSrv, cfg.TLSCert, cfg.TLSKey)
+		log.Printf("listening on %s with TLS (certificate %s, redirect %v)",
+			cfg.TLSAddr, cfg.TLSCert, cfg.TLSRedirect)
+	} else if cfg.TLSRedirect {
+		log.Printf("TLS_REDIRECT is on but no certificate is configured, plain HTTP is served as is")
+	}
 
 	<-ctx.Done()
 	log.Printf("shutting down")
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	if err := httpSrv.Shutdown(shutdownCtx); err != nil {
-		log.Printf("graceful shutdown failed: %v", err)
+	for _, s := range servers {
+		if err := s.Shutdown(shutdownCtx); err != nil {
+			log.Printf("graceful shutdown of %s failed: %v", s.Addr, err)
+		}
 	}
 	log.Printf("stopped (version %s, commit %s)", buildinfo.Version, buildinfo.Commit)
+}
+
+func newHTTPServer(addr string, handler http.Handler) *http.Server {
+	return &http.Server{
+		Addr:              addr,
+		Handler:           handler,
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       120 * time.Second,
+		TLSConfig:         &tls.Config{MinVersion: tls.VersionTLS12},
+	}
+}
+
+// listen starts a server in the background. A failure to bind is fatal: running
+// without the port the deployment asked for is worse than stopping.
+func listen(s *http.Server, cert, key string) {
+	go func() {
+		var err error
+		if cert != "" {
+			err = s.ListenAndServeTLS(cert, key)
+		} else {
+			err = s.ListenAndServe()
+		}
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Fatalf("server on %s: %v", s.Addr, err)
+		}
+	}()
 }
 
 // tokenCommand prints upload tokens. It derives them from the application id

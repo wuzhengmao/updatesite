@@ -13,7 +13,10 @@ services:
     restart: unless-stopped
 
     ports:
-      - "8080:8080"
+      # Host port on the left. The container listens on 80 and 443; switch to
+      # "80:80" and "443:443" if nothing else on the host holds those ports.
+      - "8080:80"
+      - "8443:443"
 
     environment:
       SITE_TITLE: "软件更新中心"
@@ -29,6 +32,15 @@ services:
       # Largest accepted upload. Accepts plain bytes or a suffix.
       # MAX_UPLOAD: "2GiB"
 
+      # HTTPS. Uncomment both lines and mount the certificates below to serve
+      # TLS on 443 as well as plain HTTP on 80. TLS_REDIRECT sends every plain
+      # HTTP visitor to HTTPS (the /api/v1/health probe stays on HTTP).
+      # TLS_CERT: "/certs/server.crt"
+      # TLS_KEY: "/certs/server.key"
+      # TLS_REDIRECT: "true"
+      # Absolute URL used in API responses; set it once TLS is on.
+      # BASE_URL: "https://update.example.com"
+
     volumes:
       # The archive. Publish either by dropping <app-id>/<version>/ directories
       # in here, or through POST /api/v1/apps/{app}/upload.
@@ -40,6 +52,9 @@ services:
       - ./release/apps:/data/apps
       # Persists computed sha256 digests across restarts.
       - updatesite-cache:/var/cache/updatesite
+      # TLS certificates, mounted read-only. Generate a pair with
+      # scripts/self-signed-cert.sh for testing, or drop in real ones.
+      # - ./certs:/certs:ro
 
     # The container runs as root so that archives with restrictive permissions
     # mount without surprises. The image has no shell and the archive is mounted

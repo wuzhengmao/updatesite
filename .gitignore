@@ -17,3 +17,6 @@
 .idea/
 *.swp
 .DS_Store
+
+# TLS certificates, never commit these
+/certs/

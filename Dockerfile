@@ -47,13 +47,16 @@ COPY --from=build /out/cache /var/cache/updatesite
 
 # PATH is declared explicitly: scratch images have nothing on it otherwise, and
 # docker exec does not search beyond it.
+# ADDR is the plain HTTP port; HTTPS on TLS_ADDR starts automatically once
+# TLS_CERT and TLS_KEY point at a certificate and its key.
 ENV PATH=/usr/local/bin:/usr/bin:/bin \
     DATA_DIR=/data \
     CACHE_DIR=/var/cache/updatesite \
-    ADDR=:8080 \
+    ADDR=:80 \
+    TLS_ADDR=:443 \
     SCAN_INTERVAL=15s
 
-EXPOSE 8080
+EXPOSE 80 443
 VOLUME ["/data"]
 
 # The image has no shell or curl, so the binary probes itself.

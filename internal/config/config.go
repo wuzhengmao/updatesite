@@ -25,7 +25,17 @@ type Config struct {
 
 	UploadEnabled bool  // expose the release upload endpoint
 	MaxUpload     int64 // largest accepted upload, in bytes
+
+	TLSAddr     string // HTTPS listen address, used only when a certificate is set
+	TLSCert     string // path to a PEM certificate (or a full chain)
+	TLSKey      string // path to the matching PEM private key
+	TLSRedirect bool   // send plain HTTP visitors to HTTPS
 }
+
+// TLSEnabled reports whether an HTTPS listener should be started. Both halves
+// of the key pair must be present; a half-configured pair is reported once at
+// load time and otherwise ignored.
+func (c Config) TLSEnabled() bool { return c.TLSCert != "" && c.TLSKey != "" }
 
 // Load reads the configuration from the environment, applying defaults.
 func Load() Config {
@@ -43,6 +53,15 @@ func Load() Config {
 
 		UploadEnabled: envBool("UPLOAD_ENABLED", true),
 		MaxUpload:     envBytes("MAX_UPLOAD", 2<<30),
+
+		TLSAddr:     env("TLS_ADDR", ":443"),
+		TLSCert:     env("TLS_CERT", ""),
+		TLSKey:      env("TLS_KEY", ""),
+		TLSRedirect: envBool("TLS_REDIRECT", false),
+	}
+	if (c.TLSCert == "") != (c.TLSKey == "") {
+		log.Printf("config: TLS_CERT and TLS_KEY must be set together, HTTPS will stay off")
+		c.TLSCert, c.TLSKey = "", ""
 	}
 	if c.MaxUpload < 1<<20 {
 		log.Printf("config: MAX_UPLOAD %d is too small, using 1MiB", c.MaxUpload)
