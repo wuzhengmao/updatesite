@@ -421,6 +421,64 @@ curl -fS -X PUT \
 
 ---
 
+## 删除
+
+两个接口都是**不可恢复**的：删除会直接抹掉归档目录里的文件，没有回收站。
+鉴权与上传接口相同，未配置 `UPLOAD_SECRET` 时返回 `403`。
+
+> 网页端 <https://localhost:8443/upload> 的「版本列表」与「危险操作」用的是这两个接口，
+> 并且要求**手工输入版本号 / 应用 ID** 才能点确认，避免误点。
+
+### `DELETE /api/v1/apps/{app}/releases/{version}`
+
+删除一个已发布的版本，该版本的安装包与元数据一并移除。同一应用的其他版本、
+`app.json` 与图标不受影响。
+
+```bash
+curl -fS -X DELETE \
+  -H "Authorization: Bearer $TOKEN" \
+  https://update.example.com/api/v1/apps/demo-desktop/releases/1.0.0
+```
+
+`{version}` 必须是归档目录里真实存在的目录名。`latest` 在这里**没有特殊含义** ——
+它不是一个目录名，会被拒绝，以免有人以为它指向最新版却删掉了别的东西。
+
+```json
+{"ok": true, "app": "demo-desktop", "version": "1.0.0", "message": "版本 1.0.0 已删除"}
+```
+
+### `DELETE /api/v1/apps/{app}`
+
+删除整个应用：全部版本、`app.json`、图标。归档目录下的 `apps/{app}/` 会被整目录移除。
+
+```bash
+curl -fS -X DELETE \
+  -H "Authorization: Bearer $TOKEN" \
+  https://update.example.com/api/v1/apps/demo-desktop
+```
+
+```json
+{"ok": true, "app": "demo-desktop", "message": "应用 demo-desktop 及其全部版本已删除"}
+```
+
+### 实现方式
+
+删除**先改名再抹除**：目标目录先被移到同级的 `.trash-<随机>` 隐藏目录，
+然后再删除。扫描器跳过以 `.` 开头的目录，所以版本对站点是瞬间消失的；
+即使 `RemoveAll` 中途失败（Windows 上文件被占用时会发生），也不会留下一个
+内容残缺、看起来正常的版本目录。
+
+| 状态码 | 含义 |
+| --- | --- |
+| `200` | 已删除 |
+| `400` | 应用 ID 或版本名非法（`delete_failed`） |
+| `401` | 令牌缺失或错误 |
+| `403` | 站点未开启上传功能 |
+| `404` | 应用或版本不存在 |
+| `503` | 归档目录不可写 |
+
+---
+
 ## `GET /dl/{app}/{version}/{file}`
 
 下载产物。`{version}` 可以是 `latest`。`{file}` 支持相对路径，

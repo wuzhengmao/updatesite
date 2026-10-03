@@ -272,10 +272,110 @@ func TestUploadPage(t *testing.T) {
 		`id="m-icon"`,
 		`id="meta-load"`,
 		`id="meta-save"`,
+		// Version list and destructive actions.
+		`id="versions-body"`,
+		`id="app-delete"`,
+		`id="app-delete-confirm"`,
+		`id="confirm-app-input"`,
 	} {
 		if !strings.Contains(html, want) {
 			t.Errorf("/upload is missing %q", want)
 		}
+	}
+}
+
+// Deleting a version removes exactly that version.
+func TestDeleteRelease(t *testing.T) {
+	ts, dir := newSite(t)
+	appID := "demo" // already exists in the fixture, with 1.0.0 and 1.2.0
+	tok := token.For(uploadSecret, appID)
+	url := ts.URL + "/api/v1/apps/" + appID + "/releases/1.0.0"
+
+	del := func(target, bearer string) (int, map[string]any) {
+		t.Helper()
+		req, err := http.NewRequest(http.MethodDelete, target, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if bearer != "" {
+			req.Header.Set("Authorization", "Bearer "+bearer)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		var out map[string]any
+		json.NewDecoder(resp.Body).Decode(&out)
+		return resp.StatusCode, out
+	}
+
+	if code, _ := del(url, ""); code != http.StatusUnauthorized {
+		t.Errorf("without a token: status %d, want 401", code)
+	}
+	if code, _ := del(url, token.For(uploadSecret, "otherapp")); code != http.StatusUnauthorized {
+		t.Errorf("with another app's token: status %d, want 401", code)
+	}
+
+	code, body := del(url, tok)
+	if code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %v", code, body)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "apps", appID, "1.0.0")); !os.IsNotExist(err) {
+		t.Error("the version directory is still there")
+	}
+	// The sibling version and the app metadata survive.
+	for _, p := range []string{
+		filepath.Join(dir, "apps", appID, "1.2.0"),
+		filepath.Join(dir, "apps", appID, "app.json"),
+	} {
+		if _, err := os.Stat(p); err != nil {
+			t.Errorf("%s should have been left alone: %v", p, err)
+		}
+	}
+
+	if code, _ := del(url, tok); code != http.StatusNotFound {
+		t.Errorf("deleting again: status %d, want 404", code)
+	}
+	// "latest" is not a directory name, so it must not silently resolve.
+	if code, _ := del(ts.URL+"/api/v1/apps/"+appID+"/releases/latest", tok); code == http.StatusOK {
+		t.Error(`DELETE .../releases/latest was accepted`)
+	}
+}
+
+func TestDeleteApp(t *testing.T) {
+	ts, dir := newSite(t)
+	appID := "edge" // exists in the fixture with a pre-release
+	tok := token.For(uploadSecret, appID)
+	url := ts.URL + "/api/v1/apps/" + appID
+
+	req, _ := http.NewRequest(http.MethodDelete, url, nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Errorf("without a token: status %d, want 401", resp.StatusCode)
+	}
+
+	req, _ = http.NewRequest(http.MethodDelete, url, nil)
+	req.Header.Set("X-Upload-Token", tok)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", resp.StatusCode, body)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "apps", appID)); !os.IsNotExist(err) {
+		t.Error("the application directory is still there")
+	}
+	// The other application is untouched.
+	if _, err := os.Stat(filepath.Join(dir, "apps", "demo")); err != nil {
+		t.Errorf("a sibling application was removed: %v", err)
 	}
 }
 

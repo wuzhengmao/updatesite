@@ -155,6 +155,8 @@
         show(uploadResult, lines.join('\n'), true);
         fileInput.value = '';
         refreshFileName();
+        // A new release has just appeared; keep the list below in step.
+        loadVersions();
       } else {
         show(uploadResult, '发布失败（' + xhr.status + '）\n\n' +
           ((data.error && data.error.message) || 'HTTP ' + xhr.status), false);
@@ -256,6 +258,8 @@
         current = r.data.metadata || {};
         fillForm(current);
         showIcon(current.icon ? r.data.iconUrl : '', current.icon);
+        // The version list lives in the same panel, so load it together.
+        loadVersions();
         if (!quiet) {
           show(metaResult, '已载入 ' + appID() + ' 的当前信息。', true);
         }
@@ -360,5 +364,231 @@
         iconInput.value = '';
         return '图标已更新为 ' + current.icon;
       });
+  }
+
+  // ========================================================== removing things
+
+  var versionsBody = document.getElementById('versions-body');
+  var versionsWrap = document.getElementById('versions-wrap');
+  var versionsHint = document.getElementById('versions-hint');
+  var manageResult = document.getElementById('manage-result');
+  var lastReleases = [];
+
+  function cell(text, className) {
+    var td = document.createElement('td');
+    td.textContent = text;
+    if (className) td.className = className;
+    return td;
+  }
+
+  // Every value here comes from a directory or file name, so it is written with
+  // textContent throughout — never innerHTML.
+  function renderVersions() {
+    versionsBody.textContent = '';
+
+    if (!lastReleases.length) {
+      versionsWrap.hidden = true;
+      versionsHint.hidden = false;
+      versionsHint.textContent = appID()
+        ? '这个应用还没有任何版本。'
+        : '（尚未载入）';
+      return;
+    }
+
+    versionsHint.hidden = true;
+    versionsWrap.hidden = false;
+    lastReleases.forEach(function (rel) {
+      versionsBody.appendChild(versionRow(rel));
+    });
+  }
+
+  function versionRow(rel) {
+    var tr = document.createElement('tr');
+
+    var version = document.createElement('td');
+    version.className = 'mono';
+    version.textContent = rel.version;
+    if (rel.prerelease) {
+      var pre = document.createElement('span');
+      pre.className = 'tag';
+      pre.textContent = 'pre';
+      version.appendChild(pre);
+    }
+    tr.appendChild(version);
+
+    tr.appendChild(cell(rel.channel || '—'));
+    tr.appendChild(cell(rel.publishedAt ? rel.publishedAt.slice(0, 10) : '—'));
+
+    var artifacts = rel.artifacts || [];
+    var total = artifacts.reduce(function (n, a) { return n + (a.size || 0); }, 0);
+    tr.appendChild(cell(String(artifacts.length), 'num'));
+    tr.appendChild(cell(mb(total), 'num'));
+
+    var action = document.createElement('td');
+    action.className = 'actions';
+    var remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'btn btn-sm btn-danger';
+    remove.textContent = '删除';
+    remove.addEventListener('click', function () {
+      askVersionDelete(action, rel.version);
+    });
+    action.appendChild(remove);
+    tr.appendChild(action);
+
+    return tr;
+  }
+
+  // askVersionDelete swaps the action cell for a type-to-confirm control. The
+  // typed value must match exactly, which makes an accidental click harmless.
+  function askVersionDelete(action, version) {
+    action.textContent = '';
+
+    var box = document.createElement('div');
+    box.className = 'row-confirm';
+
+    var input = document.createElement('input');
+    input.type = 'text';
+    input.spellcheck = false;
+    input.autocomplete = 'off';
+    input.placeholder = version;
+    input.className = 'confirm-input';
+
+    var go = document.createElement('button');
+    go.type = 'button';
+    go.className = 'btn btn-sm btn-danger';
+    go.textContent = '确认删除';
+    go.disabled = true;
+
+    var cancel = document.createElement('button');
+    cancel.type = 'button';
+    cancel.className = 'btn btn-sm btn-ghost';
+    cancel.textContent = '取消';
+
+    input.addEventListener('input', function () {
+      go.disabled = input.value.trim() !== version;
+    });
+    cancel.addEventListener('click', renderVersions);
+    go.addEventListener('click', function () {
+      go.disabled = true;
+      go.textContent = '删除中…';
+      request('DELETE', '/api/v1/apps/' + encodeURIComponent(appID()) +
+        '/releases/' + encodeURIComponent(version))
+        .then(function () {
+          show(manageResult, '版本 ' + version + ' 已删除。', true);
+          return Promise.all([loadVersions(), loadMetadata(true)]);
+        })
+        .catch(function (err) {
+          show(manageResult, '删除失败\n\n' + err.message, false);
+          renderVersions();
+        });
+    });
+
+    box.appendChild(input);
+    box.appendChild(go);
+    box.appendChild(cancel);
+    action.appendChild(box);
+    input.focus();
+  }
+
+  // request performs a token-authenticated JSON call and rejects on failure.
+  function request(method, path, body) {
+    var options = { method: method, headers: authHeaders() };
+    if (body !== undefined) {
+      options.headers['Content-Type'] = 'application/json';
+      options.body = JSON.stringify(body);
+    }
+    return fetch(path, options).then(function (r) {
+      return r.json()
+        .catch(function () { return {}; })
+        .then(function (data) {
+          if (!r.ok) {
+            throw new Error((data.error && data.error.message) || ('HTTP ' + r.status));
+          }
+          return data;
+        });
+    });
+  }
+
+  function loadVersions() {
+    if (!appID()) {
+      lastReleases = [];
+      renderVersions();
+      return Promise.resolve();
+    }
+    return fetch('/api/v1/apps/' + encodeURIComponent(appID()) + '/releases')
+      .then(function (r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      })
+      .then(function (data) {
+        // Newest first, matching the order the scanner already returns.
+        lastReleases = data.releases || [];
+        renderVersions();
+      })
+      .catch(function (err) {
+        lastReleases = [];
+        renderVersions();
+        versionsHint.hidden = false;
+        versionsHint.textContent = '版本列表读取失败：' + err.message;
+      });
+  }
+
+  // ------------------------------------------------------- removing the app
+
+  var appDeleteButton = document.getElementById('app-delete');
+  var appDeleteConfirm = document.getElementById('app-delete-confirm');
+  var appDeleteGo = document.getElementById('app-delete-go');
+  var appDeleteName = document.getElementById('confirm-app-name');
+  var appDeleteInput = document.getElementById('confirm-app-input');
+
+  appDeleteButton.addEventListener('click', function () {
+    if (!requireCredentials(function (m) { show(manageResult, m, false); })) return;
+    appDeleteName.textContent = appID();
+    appDeleteConfirm.hidden = false;
+    appDeleteButton.hidden = true;
+    appDeleteInput.value = '';
+    appDeleteGo.disabled = true;
+    appDeleteInput.focus();
+  });
+
+  document.getElementById('app-delete-cancel').addEventListener('click', function () {
+    appDeleteConfirm.hidden = true;
+    appDeleteButton.hidden = false;
+  });
+
+  appDeleteInput.addEventListener('input', function () {
+    appDeleteGo.disabled = appDeleteInput.value.trim() !== appID();
+  });
+
+  appDeleteGo.addEventListener('click', function () {
+    var id = appID();
+    appDeleteGo.disabled = true;
+    appDeleteGo.textContent = '删除中…';
+
+    request('DELETE', '/api/v1/apps/' + encodeURIComponent(id))
+      .then(function () {
+        appDeleteConfirm.hidden = true;
+        appDeleteButton.hidden = false;
+        lastReleases = [];
+        current = null;
+        fillForm({});
+        showIcon('', '');
+        renderVersions();
+        versionsHint.textContent = '（应用已删除）';
+        lastLoaded = '';
+        show(manageResult, '应用 ' + id + ' 及其全部版本已删除。', true);
+      })
+      .catch(function (err) {
+        show(manageResult, '删除失败\n\n' + err.message, false);
+      })
+      .finally(function () {
+        appDeleteReset();
+      });
+  });
+
+  function appDeleteReset() {
+    appDeleteGo.disabled = false;
+    appDeleteGo.textContent = '确认删除';
   }
 })();

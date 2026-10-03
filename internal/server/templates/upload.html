@@ -1,6 +1,6 @@
 {{define "upload"}}{{template "head" .}}
 <nav class="crumbs">
-  <a href="/">应用列表</a><span class="sep">/</span><span>上传发布</span>
+  <a href="/">应用列表</a><span class="sep">/</span><span>发布与维护</span>
 </nav>
 
 <section class="panel">
@@ -162,6 +162,49 @@
 </section>
 
 <section class="panel">
+  <h2>版本列表</h2>
+  <p class="muted">
+    填写应用 ID 后自动载入。删除某个版本会移除它的安装包与元数据，<b>不可恢复</b>。
+  </p>
+  <p class="muted" id="versions-hint">（尚未载入）</p>
+  <div class="table-scroll" id="versions-wrap" hidden>
+    <table class="files">
+      <thead>
+        <tr>
+          <th>版本</th><th>通道</th><th>发布时间</th>
+          <th class="num">文件</th><th class="num">大小</th><th></th>
+        </tr>
+      </thead>
+      <tbody id="versions-body"></tbody>
+    </table>
+  </div>
+</section>
+
+<section class="panel danger-zone">
+  <h2>危险操作</h2>
+  <p class="muted">
+    删除整个应用会移除 <code>apps/&lt;应用ID&gt;/</code> 下的<b>全部内容</b> ——
+    <code>app.json</code>、图标与所有版本，<b>不可恢复</b>。
+  </p>
+
+  <button class="btn btn-danger" type="button" id="app-delete">删除整个应用</button>
+
+  <div class="confirm-box" id="app-delete-confirm" hidden>
+    <p>
+      输入应用 ID <code id="confirm-app-name"></code> 以确认。这一步无法撤销。
+    </p>
+    <input id="confirm-app-input" spellcheck="false" autocomplete="off"
+           placeholder="在此输入应用 ID">
+    <div class="confirm-actions">
+      <button class="btn btn-danger" type="button" id="app-delete-go" disabled>确认删除</button>
+      <button class="btn btn-ghost" type="button" id="app-delete-cancel">取消</button>
+    </div>
+  </div>
+
+  <pre id="manage-result" class="upload-result" hidden></pre>
+</section>
+
+<section class="panel">
   <h2>命令行</h2>
   <pre class="code-block"><code>export SITE={{if .Site.BaseURL}}{{.Site.BaseURL}}{{else}}http://&lt;站点地址&gt;{{end}}
 export APP=&lt;应用ID&gt;
@@ -184,7 +227,15 @@ curl -fS -X PUT -H "Authorization: Bearer $TOKEN" \
 # 换图标
 curl -fS -X PUT -H "Authorization: Bearer $TOKEN" \
   --data-binary @icon.png \
-  "$SITE/api/v1/apps/$APP/icon"</code></pre>
+  "$SITE/api/v1/apps/$APP/icon"
+
+# 删除某个版本（不可恢复）
+curl -fS -X DELETE -H "Authorization: Bearer $TOKEN" \
+  "$SITE/api/v1/apps/$APP/releases/1.2.0"
+
+# 删除整个应用，含全部版本（不可恢复）
+curl -fS -X DELETE -H "Authorization: Bearer $TOKEN" \
+  "$SITE/api/v1/apps/$APP"</code></pre>
 </section>
 <script src="/static/upload.js" defer></script>
 {{template "foot" .}}{{end}}

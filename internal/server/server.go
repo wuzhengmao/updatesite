@@ -91,6 +91,10 @@ func (s *Server) routes() *http.ServeMux {
 	mux.HandleFunc("PUT /api/v1/apps/{app}/metadata", s.handlePutMetadata)
 	mux.HandleFunc("PUT /api/v1/apps/{app}/icon", s.handlePutIcon)
 
+	// Removal. Destructive, so the token is required.
+	mux.HandleFunc("DELETE /api/v1/apps/{app}/releases/{version}", s.handleDeleteRelease)
+	mux.HandleFunc("DELETE /api/v1/apps/{app}", s.handleDeleteApp)
+
 	// Upload page.
 	mux.HandleFunc("GET /upload", s.handleUploadPage)
 

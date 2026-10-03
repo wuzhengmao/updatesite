@@ -227,6 +227,8 @@ curl -k "https://localhost:8443/api/v1/apps/myapp/check?version=1.0.0&os=windows
 | `GET /api/v1/apps/{app}/metadata` | 读取应用元数据（含图标信息），需令牌 |
 | `PUT /api/v1/apps/{app}/metadata` | **修改应用元数据**（名称/描述/标签…），需令牌 |
 | `PUT /api/v1/apps/{app}/icon` | **更换图标**（PNG/JPEG/SVG/WebP），需令牌 |
+| `DELETE /api/v1/apps/{app}/releases/{version}` | **删除某个版本**，需令牌，不可恢复 |
+| `DELETE /api/v1/apps/{app}` | **删除整个应用**，需令牌，不可恢复 |
 | `POST /api/v1/rescan` | 立即重新扫描 |
 | `GET /dl/{app}/{version}/{file}` | 下载；版本可写 `latest`，支持断点续传 |
 | `GET /docs` | 内置文档（发布规范、上传说明、API） |
