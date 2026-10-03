@@ -71,13 +71,16 @@ VERSION=0.3.0-rc1 docker compose up -d --build
 镜像里的二进制是自包含的：模板、样式、脚本、文档全部嵌在里面，运行时不需要
 任何仓库文件。以下全程只用 `docker`，不需要 `git clone`。
 
+下面用 `latest` 是为了让示例不会过期；生产环境建议换成固定版本号
+（如 `wuzm219/updatesite:0.2.1`），或者干脆用 digest，见文末「推送到 Docker Hub」。
+
 **1. 建目录，从镜像里生成部署密钥**
 
 ```bash
 mkdir -p updatesite/{apps,certs} && cd updatesite
 
 cat > .env <<EOF
-UPLOAD_SECRET=$(docker run --rm wuzm219/updatesite:0.2.0 token -gen-secret -q)
+UPLOAD_SECRET=$(docker run --rm wuzm219/updatesite:latest token -gen-secret -q)
 EOF
 ```
 
@@ -91,7 +94,7 @@ EOF
 ```yaml
 services:
   updatesite:
-    image: wuzm219/updatesite:0.2.0
+    image: wuzm219/updatesite:latest
     container_name: updatesite
     restart: unless-stopped
     ports:
@@ -160,12 +163,12 @@ docker exec updatesite updatesite token <应用ID>       # 拿上传令牌
 ```bash
 docker run -d --name updatesite --restart unless-stopped \
   -p 8080:80 -p 8443:443 \
-  -e UPLOAD_SECRET="$(docker run --rm wuzm219/updatesite:0.2.0 token -gen-secret -q)" \
+  -e UPLOAD_SECRET="$(docker run --rm wuzm219/updatesite:latest token -gen-secret -q)" \
   -e TZ=Asia/Shanghai \
   -e TLS_CERT=/certs/server.crt -e TLS_KEY=/certs/server.key -e TLS_REDIRECT=true \
   -v "$PWD/apps:/data/apps" -v "$PWD/certs:/certs:ro" \
   -v updatesite-cache:/var/cache/updatesite \
-  wuzm219/updatesite:0.2.0
+  wuzm219/updatesite:latest
 ```
 
 （Windows 的 Git Bash 里路径要写成 `"D:/updatesite/apps:/data/apps"` 这种形式，
@@ -454,7 +457,7 @@ PLATFORMS=linux/arm64 ./scripts/build.sh    # 只构建 arm64 并载入本地 do
 
 ```bash
 docker buildx build --platform linux/amd64,linux/arm64 \
-  -t wuzm219/updatesite:0.2.0 --push .        # 版本号自动取自 VERSION
+  -t wuzm219/updatesite:$(cat VERSION) --push .   # 版本号取自 VERSION 文件
 ```
 
 ### 推送到 Docker Hub
@@ -462,15 +465,15 @@ docker buildx build --platform linux/amd64,linux/arm64 \
 镜像名是 `wuzm219/updatesite`。`buildx` 构建多架构后直接推送：
 
 ```bash
-docker login                                    # 只需要做一次
-TAG=0.1.0 PUSH=1 ./scripts/build.sh
+docker login                    # 只需要做一次
+PUSH=1 ./scripts/build.sh      # tag 取自 VERSION 文件，无需手动指定
 ```
 
-会推送 `wuzm219/updatesite:0.1.0` 和 `wuzm219/updatesite:latest` 两个 tag，
+会推送 `wuzm219/updatesite:<VERSION 文件的值>` 和 `wuzm219/updatesite:latest` 两个 tag，
 都带 amd64 与 arm64 两个平台：
 
 ```bash
-docker manifest inspect wuzm219/updatesite:0.1.0   # 确认两个架构都在
+docker manifest inspect wuzm219/updatesite:<版本号>   # 确认两个架构都在
 ```
 
 换了镜像名或命名空间的话，改 `scripts/build.sh` 里的 `IMAGE` 默认值，
@@ -482,7 +485,7 @@ docker manifest inspect wuzm219/updatesite:0.1.0   # 确认两个架构都在
 显示在站点页脚和 `/api/v1/health` 里：
 
 ```
-0.1.0+d0651d4 · 2026-10-03 13:32 +08:00
+0.2.1+a1b2c3d · 2026-10-03 13:32 +08:00
 ```
 
 构建时间来自 `BUILD_DATE`（UTC 存储，便于比较）。没传时回落到二进制自身的
