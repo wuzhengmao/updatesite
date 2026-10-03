@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/mti/updatesite/internal/index"
+	"github.com/wuzhengmao/updatesite/internal/index"
 )
 
 // Options describes one publish operation.

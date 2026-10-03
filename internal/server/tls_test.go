@@ -5,8 +5,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/mti/updatesite/internal/config"
-	"github.com/mti/updatesite/internal/server"
+	"github.com/wuzhengmao/updatesite/internal/config"
+	"github.com/wuzhengmao/updatesite/internal/server"
 )
 
 func TestRedirectToTLS(t *testing.T) {

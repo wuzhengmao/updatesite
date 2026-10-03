@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mti/updatesite/internal/index"
+	"github.com/wuzhengmao/updatesite/internal/index"
 )
 
 // pageData carries everything the templates may use. One struct keeps the

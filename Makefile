@@ -1,13 +1,13 @@
 BINARY := updatesite
-IMAGE  ?= mti/updatesite
+IMAGE  ?= wuzm219/updatesite
 TAG    ?= $(shell date -u +%Y%m%d)
 VERSION := $(TAG)
 COMMIT  := $(shell git rev-parse --short HEAD 2>/dev/null || echo none)
 DATE    := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 LDFLAGS := -s -w \
-	-X github.com/mti/updatesite/internal/buildinfo.Version=$(VERSION) \
-	-X github.com/mti/updatesite/internal/buildinfo.Commit=$(COMMIT) \
-	-X github.com/mti/updatesite/internal/buildinfo.Date=$(DATE)
+	-X github.com/wuzhengmao/updatesite/internal/buildinfo.Version=$(VERSION) \
+	-X github.com/wuzhengmao/updatesite/internal/buildinfo.Commit=$(COMMIT) \
+	-X github.com/wuzhengmao/updatesite/internal/buildinfo.Date=$(DATE)
 
 .PHONY: help run build test vet fmt image push clean
 

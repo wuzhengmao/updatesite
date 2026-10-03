@@ -24,11 +24,11 @@ import (
 	// and TZ can take effect.
 	_ "time/tzdata"
 
-	"github.com/mti/updatesite/internal/buildinfo"
-	"github.com/mti/updatesite/internal/config"
-	"github.com/mti/updatesite/internal/index"
-	"github.com/mti/updatesite/internal/server"
-	"github.com/mti/updatesite/internal/token"
+	"github.com/wuzhengmao/updatesite/internal/buildinfo"
+	"github.com/wuzhengmao/updatesite/internal/config"
+	"github.com/wuzhengmao/updatesite/internal/index"
+	"github.com/wuzhengmao/updatesite/internal/server"
+	"github.com/wuzhengmao/updatesite/internal/token"
 )
 
 const usageText = `updatesite - 应用更新站点

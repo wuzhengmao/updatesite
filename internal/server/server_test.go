@@ -17,10 +17,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mti/updatesite/internal/config"
-	"github.com/mti/updatesite/internal/index"
-	"github.com/mti/updatesite/internal/server"
-	"github.com/mti/updatesite/internal/token"
+	"github.com/wuzhengmao/updatesite/internal/config"
+	"github.com/wuzhengmao/updatesite/internal/index"
+	"github.com/wuzhengmao/updatesite/internal/server"
+	"github.com/wuzhengmao/updatesite/internal/token"
 )
 
 // uploadSecret is the deployment secret the upload tests mint tokens from.

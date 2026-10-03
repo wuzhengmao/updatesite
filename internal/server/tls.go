@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/mti/updatesite/internal/config"
+	"github.com/wuzhengmao/updatesite/internal/config"
 )
 
 // HealthPath is the liveness endpoint. It is exempt from the HTTPS redirect so

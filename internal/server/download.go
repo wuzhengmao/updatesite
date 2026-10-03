@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/mti/updatesite/internal/index"
+	"github.com/wuzhengmao/updatesite/internal/index"
 )
 
 // installers maps extensions to the media type a client should expect. Anything

@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/mti/updatesite/internal/appmeta"
-	"github.com/mti/updatesite/internal/index"
+	"github.com/wuzhengmao/updatesite/internal/appmeta"
+	"github.com/wuzhengmao/updatesite/internal/index"
 )
 
 // metadataResponse is what the edit form reads and writes.

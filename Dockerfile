@@ -25,9 +25,9 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
     go build -trimpath -tags netgo,osusergo \
         -ldflags "-s -w \
-            -X github.com/mti/updatesite/internal/buildinfo.Version=$VERSION \
-            -X github.com/mti/updatesite/internal/buildinfo.Commit=$COMMIT \
-            -X github.com/mti/updatesite/internal/buildinfo.Date=$BUILD_DATE" \
+            -X github.com/wuzhengmao/updatesite/internal/buildinfo.Version=$VERSION \
+            -X github.com/wuzhengmao/updatesite/internal/buildinfo.Commit=$COMMIT \
+            -X github.com/wuzhengmao/updatesite/internal/buildinfo.Date=$BUILD_DATE" \
         -o /out/updatesite ./cmd/updatesite
 
 # The checksum cache directory ships with the image so that a named volume
@@ -35,7 +35,7 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 RUN mkdir -p /out/cache
 
 # ---------------------------------------------------------------- final image
-# scratch keeps the image around 10 MB and removes any shell or package manager
+# scratch keeps the image around 14 MB and removes any shell or package manager
 # from the attack surface.
 FROM scratch
 

@@ -14,9 +14,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mti/updatesite/internal/buildinfo"
-	"github.com/mti/updatesite/internal/config"
-	"github.com/mti/updatesite/internal/index"
+	"github.com/wuzhengmao/updatesite/internal/buildinfo"
+	"github.com/wuzhengmao/updatesite/internal/config"
+	"github.com/wuzhengmao/updatesite/internal/index"
 )
 
 //go:embed templates static

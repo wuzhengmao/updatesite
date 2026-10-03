@@ -12,15 +12,15 @@
 - **单二进制** —— Go 标准库实现，零第三方依赖，静态编译
 - **多架构镜像** —— `linux/amd64` 与 `linux/arm64`，基于 `scratch`，镜像约 13 MB
 
-代码在 <https://github.com/wuzhengmao/app-update-site>。
+代码在 <https://github.com/wuzhengmao/updatesite>。
 
 ---
 
 ## 快速开始
 
 ```bash
-git clone https://github.com/wuzhengmao/app-update-site.git
-cd app-update-site
+git clone https://github.com/wuzhengmao/updatesite.git
+cd updatesite
 docker compose up -d --build
 ```
 
@@ -322,8 +322,29 @@ PLATFORMS=linux/arm64 ./scripts/build.sh    # 只构建 arm64 并载入本地 do
 
 ```bash
 docker buildx build --platform linux/amd64,linux/arm64 \
-  --build-arg VERSION=1.2.0 -t mti/updatesite:1.2.0 --push .
+  --build-arg VERSION=1.2.0 -t wuzm219/updatesite:1.2.0 --push .
 ```
+
+### 推送到 Docker Hub
+
+镜像名是 `wuzm219/updatesite`。`buildx` 构建多架构后直接推送：
+
+```bash
+docker login                                    # 只需要做一次
+TAG=0.1.0 PUSH=1 ./scripts/build.sh
+```
+
+会推送 `wuzm219/updatesite:0.1.0` 和 `wuzm219/updatesite:latest` 两个 tag，
+都带 amd64 与 arm64 两个平台：
+
+```bash
+docker manifest inspect wuzm219/updatesite:0.1.0   # 确认两个架构都在
+```
+
+换了镜像名或命名空间的话，改 `scripts/build.sh` 里的 `IMAGE` 默认值，
+或临时覆盖：`IMAGE=someone/updatesite PUSH=1 ./scripts/build.sh`。
+
+---
 
 `scripts/build.sh` 会把版本号、commit、构建时间通过 `-ldflags` 注入，
 显示在站点页脚和 `/api/v1/health` 里：

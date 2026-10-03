@@ -9,8 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/mti/updatesite/internal/token"
-	"github.com/mti/updatesite/internal/upload"
+	"github.com/wuzhengmao/updatesite/internal/token"
+	"github.com/wuzhengmao/updatesite/internal/upload"
 )
 
 // uploadResponse describes the outcome of a publish.

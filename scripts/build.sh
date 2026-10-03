@@ -8,7 +8,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-IMAGE="${IMAGE:-mti/updatesite}"
+IMAGE="${IMAGE:-wuzm219/updatesite}"
 TAG="${TAG:-$(date -u +%Y%m%d)}"
 PLATFORMS="${PLATFORMS:-linux/amd64,linux/arm64}"
 COMMIT="$(git rev-parse --short HEAD 2>/dev/null || echo none)"

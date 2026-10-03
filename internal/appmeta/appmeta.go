@@ -15,7 +15,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/mti/updatesite/internal/index"
+	"github.com/wuzhengmao/updatesite/internal/index"
 )
 
 // FileName is the metadata file inside an application directory.

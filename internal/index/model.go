@@ -4,7 +4,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mti/updatesite/internal/semver"
+	"github.com/wuzhengmao/updatesite/internal/semver"
 )
 
 // DefaultChannel is used whenever a release does not declare one.

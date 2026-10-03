@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/mti/updatesite/docs"
+	"github.com/wuzhengmao/updatesite/docs"
 )
 
 // docOrder lists the documents that should be shown first, in order. Any other

@@ -5,9 +5,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mti/updatesite/internal/buildinfo"
-	"github.com/mti/updatesite/internal/index"
-	"github.com/mti/updatesite/internal/semver"
+	"github.com/wuzhengmao/updatesite/internal/buildinfo"
+	"github.com/wuzhengmao/updatesite/internal/index"
+	"github.com/wuzhengmao/updatesite/internal/semver"
 )
 
 // The API contract is expressed with explicit DTOs so the JSON field order is
