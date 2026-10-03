@@ -42,8 +42,8 @@ var checksumFileNames = map[string]bool{
 	"checksums.txt": true, "checksums.sha256": true, "sums.txt": true,
 }
 
-// appMeta is the optional app.json file.
-type appMeta struct {
+// AppMeta is the optional app.json file, the application level metadata.
+type AppMeta struct {
 	ID          string   `json:"id"`
 	Name        string   `json:"name"`
 	Summary     string   `json:"summary"`
@@ -160,7 +160,7 @@ func (s *Scanner) scanApp(dir, dirName string, snap *Snapshot, pending *[]string
 		Order:   defaultOrder,
 	}
 
-	meta, ok := readJSON[appMeta](filepath.Join(dir, appMetaFile), snap)
+	meta, ok := readJSON[AppMeta](filepath.Join(dir, appMetaFile), snap)
 	if ok {
 		if meta.ID != "" && meta.ID != dirName {
 			snap.warn("%s: app.json id %q ignored, the directory name %q wins", dirName, meta.ID, dirName)

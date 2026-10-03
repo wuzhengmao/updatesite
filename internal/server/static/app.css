@@ -480,6 +480,44 @@ table.files tr:hover td { background: var(--surface-2); }
   font-size: .78rem;
 }
 
+/* Metadata form. */
+.field textarea {
+  font: inherit;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: .42rem .6rem;
+  resize: vertical;
+  min-height: 4rem;
+}
+.field textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: var(--accent); }
+
+.check { display: flex; align-items: center; gap: .45rem; font-size: .85rem; cursor: pointer; }
+.check input { width: auto; }
+
+.meta-row { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+.dropzone-sm {
+  flex: 1;
+  min-width: 200px;
+  padding: .7rem 1rem;
+  align-items: flex-start;
+  text-align: left;
+}
+.meta-actions { flex-direction: row; gap: .6rem; }
+
+.btn-ghost {
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--border);
+}
+.btn-ghost:hover { border-color: var(--accent); background: var(--accent-soft); }
+
+.details { margin-top: 1rem; font-size: .85rem; }
+.details summary { cursor: pointer; color: var(--muted); }
+.details summary:hover { color: var(--accent); }
+.details[open] summary { margin-bottom: .5rem; }
+
 .upload-result {
   margin: 1rem 0 0;
   padding: .9rem 1rem;

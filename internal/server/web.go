@@ -121,6 +121,11 @@ func (s *Server) handleIcon(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	// An SVG icon is a document: opened directly it would run any script it
+	// carries in this origin. The CSP neuters that, and nosniff stops the
+	// browser from second-guessing the declared type.
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; sandbox")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Cache-Control", "public, max-age=300")
 	http.ServeContent(w, r, filepath.Base(abs), st.ModTime(), f)
 }

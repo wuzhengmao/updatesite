@@ -4,30 +4,42 @@
 </nav>
 
 <section class="panel">
-  <h1>上传发布</h1>
+  <h1>发布与维护</h1>
   <p class="muted">
-    把符合<a href="/docs/release-spec">发布规范</a>的文件打成一个压缩包上传，
+    先填好应用 ID 和上传令牌，下面的「发布包」和「应用信息」都用这一组凭据。
+    令牌由管理员用 <code>updatesite token &lt;应用ID&gt;</code> 生成，见
+    <a href="/docs/upload">上传发布</a>。
+  </p>
+
+  <div class="upload-form">
+    <label class="field">
+      <span>应用 ID</span>
+      <input id="f-app" list="app-ids" placeholder="mti-sip-phone" spellcheck="false">
+      <datalist id="app-ids"></datalist>
+    </label>
+    <label class="field">
+      <span>上传令牌</span>
+      <input id="f-token" placeholder="由管理员提供" spellcheck="false">
+    </label>
+  </div>
+  <p class="muted" id="app-hint"></p>
+</section>
+
+<section class="panel">
+  <h2>发布包</h2>
+  <p class="muted">
+    把符合<a href="/docs/release-spec">发布规范</a>的文件打成压缩包上传，
     站点会自动解包并归档到 <code>apps/&lt;应用ID&gt;/&lt;版本号&gt;/</code>。
     支持 <code>.zip</code>、<code>.tar</code>、<code>.tar.gz</code>、<code>.tar.bz2</code>。
   </p>
 
   <form id="upload-form" class="upload-form" autocomplete="off" novalidate>
     <label class="field">
-      <span>应用 ID</span>
-      <input id="f-app" name="app" list="app-ids" placeholder="mti-sip-phone" spellcheck="false">
-      <datalist id="app-ids"></datalist>
-    </label>
-    <label class="field">
-      <span>上传令牌</span>
-      <input id="f-token" name="token" placeholder="由管理员提供" spellcheck="false">
-    </label>
-    <label class="field">
       <span>版本号<span class="muted">（可选）</span></span>
       <input id="f-version" name="version" placeholder="留空则从压缩包内推断" spellcheck="false">
     </label>
 
     <div class="field field-wide">
-      <span>发布包</span>
       <label id="drop" class="dropzone" for="f-file">
         <input type="file" id="f-file" name="file" accept=".zip,.tar,.gz,.tgz,.bz2,.tbz2">
         <span class="dropzone-arrow" aria-hidden="true">↑</span>
@@ -46,36 +58,133 @@
   </form>
 
   <pre id="upload-result" class="upload-result" hidden></pre>
+
+  <details class="details">
+    <summary>版本号怎么确定</summary>
+    <p class="muted">按以下顺序，前一步成功就不看后面的：</p>
+    <ol class="numbered">
+      <li>表单里的<b>版本号</b>，或接口的 <code>?version=</code> 参数</li>
+      <li>压缩包里<b>唯一的一级目录</b>，且目录名是合法版本号</li>
+      <li>压缩包根目录下 <code>release.json</code> 的 <code>version</code> 字段</li>
+    </ol>
+    <p class="muted">
+      同名版本已存在时会整体替换。压缩包里的 <code>release.json</code>、
+      <code>CHANGELOG.md</code>、<code>SHA256SUMS</code> 会按规范被识别，
+      平台与架构则从安装包文件名推断。
+    </p>
+  </details>
 </section>
 
 <section class="panel">
-  <h2>版本号怎么确定</h2>
-  <p class="muted">按以下顺序，前一步成功就不看后面的：</p>
-  <ol class="numbered">
-    <li>表单里的<b>版本号</b>，或接口的 <code>?version=</code> 参数</li>
-    <li>压缩包里<b>唯一的一级目录</b>，且目录名是合法版本号</li>
-    <li>压缩包根目录下 <code>release.json</code> 的 <code>version</code> 字段</li>
-  </ol>
+  <h2>应用信息</h2>
   <p class="muted">
-    同名版本已存在时会整体替换。压缩包里的 <code>release.json</code>、
-    <code>CHANGELOG.md</code>、<code>SHA256SUMS</code> 会按规范被识别，
-    平台与架构则从安装包文件名推断。
+    应用级元数据，写在 <code>apps/&lt;应用ID&gt;/app.json</code>，对所有版本生效。
+    填写应用 ID 后会自动载入现有内容，也可以点「读取当前信息」手动载入；
+    应用尚不存在时会新建。
   </p>
+  <p class="muted">
+    保存会覆盖整个 <code>app.json</code>：表单里留空的字段会被清空（图标除外，
+    它由下面的图标上传维护）。
+  </p>
+
+  <form id="meta-form" class="upload-form" autocomplete="off" novalidate>
+    <label class="field">
+      <span>显示名称</span>
+      <input id="m-name" placeholder="mti-sip-phone 软电话" spellcheck="false">
+    </label>
+    <label class="field">
+      <span>厂商</span>
+      <input id="m-vendor" placeholder="MTI" spellcheck="false">
+    </label>
+    <label class="field">
+      <span>许可证</span>
+      <input id="m-license" placeholder="Proprietary" spellcheck="false">
+    </label>
+    <label class="field">
+      <span>官网</span>
+      <input id="m-homepage" placeholder="https://example.com" spellcheck="false">
+    </label>
+    <label class="field">
+      <span>默认通道</span>
+      <input id="m-channel" placeholder="stable" spellcheck="false">
+    </label>
+    <label class="field">
+      <span>排序<span class="muted">（小的靠前）</span></span>
+      <input id="m-order" type="number" placeholder="100" spellcheck="false">
+    </label>
+
+    <label class="field field-wide">
+      <span>一句话描述</span>
+      <input id="m-summary" placeholder="显示在应用列表卡片上" spellcheck="false">
+    </label>
+
+    <label class="field field-wide">
+      <span>标签<span class="muted">（逗号分隔）</span></span>
+      <input id="m-tags" placeholder="sip, softphone, voip" spellcheck="false">
+    </label>
+
+    <label class="field field-wide">
+      <span>平台<span class="muted">（逗号分隔；留空则从安装包自动推断）</span></span>
+      <input id="m-platforms" placeholder="windows, linux" spellcheck="false">
+    </label>
+
+    <label class="field field-wide">
+      <span>详细描述<span class="muted">（Markdown）</span></span>
+      <textarea id="m-description" rows="6" spellcheck="false"></textarea>
+    </label>
+
+    <div class="field field-wide">
+      <span>图标<span class="muted">（PNG / JPEG / SVG / WebP，最大 2 MB）</span></span>
+      <div class="meta-row">
+        <img id="m-icon-preview" class="icon icon-lg" alt="" hidden>
+        <label class="dropzone dropzone-sm" for="m-icon">
+          <input type="file" id="m-icon" accept=".png,.jpg,.jpeg,.svg,.webp">
+          <span class="dropzone-main">选择新图标</span>
+          <span class="dropzone-file" id="m-icon-name"></span>
+        </label>
+      </div>
+    </div>
+
+    <div class="field field-wide">
+      <label class="check">
+        <input id="m-hidden" type="checkbox">
+        <span class="muted">在应用列表中隐藏（下载地址仍然有效）</span>
+      </label>
+    </div>
+
+    <div class="field field-wide meta-actions">
+      <button class="btn btn-ghost" type="button" id="meta-load">读取当前信息</button>
+      <button class="btn" type="submit" id="meta-save">保存应用信息</button>
+    </div>
+  </form>
+
+  <pre id="meta-result" class="upload-result" hidden></pre>
 </section>
 
 <section class="panel">
-  <h2>命令行上传</h2>
-  <p class="muted">管理员用 <code>updatesite token &lt;应用ID&gt;</code> 生成令牌后：</p>
-  <pre class="code-block"><code>curl -fS -X POST \
-  -H "Authorization: Bearer &lt;令牌&gt;" \
-  -F "file=@release.zip" \
-  -F "version=1.2.0" \
-  {{if .Site.BaseURL}}{{.Site.BaseURL}}{{else}}http://&lt;站点地址&gt;{{end}}/api/v1/apps/&lt;应用ID&gt;/upload</code></pre>
-  <p class="muted">
-    也可以直接发送原始归档：<code>curl --data-binary @release.tar.gz
-    -H "Content-Type: application/gzip" -H "Authorization: Bearer &lt;令牌&gt;"
-    ".../upload?version=1.2.0"</code>
-  </p>
+  <h2>命令行</h2>
+  <pre class="code-block"><code>export SITE={{if .Site.BaseURL}}{{.Site.BaseURL}}{{else}}http://&lt;站点地址&gt;{{end}}
+export APP=&lt;应用ID&gt;
+export TOKEN=&lt;上传令牌&gt;
+
+# 发布一个版本
+curl -fS -X POST -H "Authorization: Bearer $TOKEN" \
+  -F "file=@release.zip" -F "version=1.2.0" \
+  "$SITE/api/v1/apps/$APP/upload"
+
+# 读取应用信息
+curl -fS -H "Authorization: Bearer $TOKEN" "$SITE/api/v1/apps/$APP/metadata"
+
+# 修改应用信息
+curl -fS -X PUT -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"我的应用","vendor":"MTI"}' \
+  "$SITE/api/v1/apps/$APP/metadata"
+
+# 换图标
+curl -fS -X PUT -H "Authorization: Bearer $TOKEN" \
+  --data-binary @icon.png \
+  "$SITE/api/v1/apps/$APP/icon"</code></pre>
 </section>
 <script src="/static/upload.js" defer></script>
 {{template "foot" .}}{{end}}

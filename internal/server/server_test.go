@@ -251,19 +251,178 @@ func TestUploadPage(t *testing.T) {
 		t.Fatalf("/upload status = %d", code)
 	}
 	for _, want := range []string{
-		"上传发布",
-		"upload-form",
+		"发布与维护",
 		"/static/upload.js",
+		// Shared credentials, used by both forms below.
+		`id="f-app"`,
+		`id="f-token"`,
+		`id="app-ids"`, // suggestion list for the application id
+		// Publish form.
+		"upload-form",
 		`id="drop"`,         // drag and drop target
-		`id="app-ids"`,      // suggestion list for the application id
 		`id="progress-bar"`, // upload progress
-		`name="token"`,      // the token field
 		`name="file"`,
 		`name="version"`,
 		`novalidate`, // validation happens in script, a hidden input cannot block it
+		// Metadata form.
+		"meta-form",
+		`id="m-name"`,
+		`id="m-description"`,
+		`id="m-hidden"`,
+		`id="m-icon"`,
+		`id="meta-load"`,
+		`id="meta-save"`,
 	} {
 		if !strings.Contains(html, want) {
 			t.Errorf("/upload is missing %q", want)
+		}
+	}
+}
+
+// The metadata endpoints let an administrator set an application's identity
+// without hand editing app.json.
+func TestMetadataEndpoints(t *testing.T) {
+	ts, dir := newSite(t)
+	appID := "metaapp"
+	tok := token.For(uploadSecret, appID)
+	base := ts.URL + "/api/v1/apps/" + appID + "/metadata"
+
+	call := func(method, body string) (int, map[string]any) {
+		t.Helper()
+		var reader io.Reader
+		if body != "" {
+			reader = strings.NewReader(body)
+		}
+		req, err := http.NewRequest(method, base, reader)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if body != "" {
+			req.Header.Set("Content-Type", "application/json")
+		}
+		req.Header.Set("Authorization", "Bearer "+tok)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		var out map[string]any
+		json.NewDecoder(resp.Body).Decode(&out)
+		return resp.StatusCode, out
+	}
+
+	// Authentication applies here too.
+	req, _ := http.NewRequest(http.MethodGet, base, nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Errorf("GET without a token: status %d, want 401", resp.StatusCode)
+	}
+
+	// An application with no app.json reads back as an empty object.
+	code, body := call(http.MethodGet, "")
+	if code != http.StatusOK {
+		t.Fatalf("GET status = %d, want 200: %v", code, body)
+	}
+	if meta, ok := body["metadata"].(map[string]any); !ok || meta["name"] != "" {
+		t.Errorf("metadata = %v, want an empty object", body["metadata"])
+	}
+
+	code, body = call(http.MethodPut,
+		`{"name":"元数据应用","vendor":"MTI","tags":["a","b"],"hidden":true,"order":7}`)
+	if code != http.StatusOK {
+		t.Fatalf("PUT status = %d, want 200: %v", code, body)
+	}
+	stored, err := os.ReadFile(filepath.Join(dir, "apps", appID, "app.json"))
+	if err != nil {
+		t.Fatalf("app.json was not written: %v", err)
+	}
+	for _, want := range []string{"元数据应用", "MTI", `"hidden": true`, `"order": 7`} {
+		if !strings.Contains(string(stored), want) {
+			t.Errorf("app.json is missing %q:\n%s", want, stored)
+		}
+	}
+
+	for _, c := range []struct{ name, body, wantCode string }{
+		{"broken json", `{"name":`, "invalid_json"},
+		{"unknown field", `{"nope":"x"}`, "invalid_json"},
+		{"bad homepage", `{"homepage":"example.com"}`, "save_failed"},
+	} {
+		code, body := call(http.MethodPut, c.body)
+		if code != http.StatusBadRequest {
+			t.Errorf("%s: status %d, want 400 (%v)", c.name, code, body)
+			continue
+		}
+		if errObj, _ := body["error"].(map[string]any); errObj["code"] != c.wantCode {
+			t.Errorf("%s: error code = %v, want %q", c.name, errObj["code"], c.wantCode)
+		}
+	}
+}
+
+func TestIconUpload(t *testing.T) {
+	ts, dir := newSite(t)
+	appID := "iconapp"
+	tok := token.For(uploadSecret, appID)
+	base := ts.URL + "/api/v1/apps/" + appID + "/icon"
+
+	put := func(data []byte) (int, map[string]any) {
+		t.Helper()
+		req, err := http.NewRequest(http.MethodPut, base, bytes.NewReader(data))
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set("Authorization", "Bearer "+tok)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		var out map[string]any
+		json.NewDecoder(resp.Body).Decode(&out)
+		return resp.StatusCode, out
+	}
+
+	png := append([]byte("\x89PNG\r\n\x1a\n"), bytes.Repeat([]byte("x"), 64)...)
+	code, body := put(png)
+	if code != http.StatusOK {
+		t.Fatalf("PUT icon status = %d, want 200: %v", code, body)
+	}
+	// The file name comes from the sniffed content, never from the request.
+	if _, err := os.Stat(filepath.Join(dir, "apps", appID, "icon.png")); err != nil {
+		t.Errorf("icon.png was not written: %v", err)
+	}
+	// app.json must point at it, or a previously configured custom name would
+	// keep winning when the scanner resolves the icon.
+	stored, _ := os.ReadFile(filepath.Join(dir, "apps", appID, "app.json"))
+	if !strings.Contains(string(stored), `"icon": "icon.png"`) {
+		t.Errorf("app.json does not reference the new icon:\n%s", stored)
+	}
+
+	// An SVG replaces the PNG, and the PNG is cleaned up.
+	svg := []byte(`<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg"><rect/></svg>`)
+	if code, body := put(svg); code != http.StatusOK {
+		t.Fatalf("PUT svg status = %d: %v", code, body)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "apps", appID, "icon.svg")); err != nil {
+		t.Errorf("icon.svg was not written: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "apps", appID, "icon.png")); !os.IsNotExist(err) {
+		t.Error("the previous icon.png was left behind")
+	}
+
+	for _, c := range []struct {
+		name string
+		data []byte
+	}{
+		{"not an image", []byte("just some text")},
+		{"html posing as svg", []byte(`<html><script>alert(1)</script></html>`)},
+		{"empty", nil},
+	} {
+		if code, body := put(c.data); code == http.StatusOK {
+			t.Errorf("%s: icon was accepted (%v)", c.name, body)
 		}
 	}
 }

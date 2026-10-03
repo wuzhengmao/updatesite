@@ -170,6 +170,9 @@ curl "http://localhost:8080/api/v1/apps/myapp/check?version=1.0.0&os=windows&arc
 | `GET /api/v1/apps/{app}/latest` | 最新版本，可按 `os` / `arch` 筛选 |
 | `GET /api/v1/apps/{app}/check` | **查更新** |
 | `POST /api/v1/apps/{app}/upload` | **上传发布**压缩包，需令牌 |
+| `GET /api/v1/apps/{app}/metadata` | 读取应用元数据（含图标信息），需令牌 |
+| `PUT /api/v1/apps/{app}/metadata` | **修改应用元数据**（名称/描述/标签…），需令牌 |
+| `PUT /api/v1/apps/{app}/icon` | **更换图标**（PNG/JPEG/SVG/WebP），需令牌 |
 | `POST /api/v1/rescan` | 立即重新扫描 |
 | `GET /dl/{app}/{version}/{file}` | 下载；版本可写 `latest`，支持断点续传 |
 | `GET /docs` | 内置文档（发布规范、上传说明、API） |

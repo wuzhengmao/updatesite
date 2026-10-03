@@ -85,6 +85,11 @@ func (s *Server) routes() *http.ServeMux {
 	mux.HandleFunc("POST /api/v1/rescan", s.handleRescan)
 	mux.HandleFunc("POST /api/v1/apps/{app}/upload", s.handleUpload)
 
+	// Application level metadata: app.json and the icon.
+	mux.HandleFunc("GET /api/v1/apps/{app}/metadata", s.handleGetMetadata)
+	mux.HandleFunc("PUT /api/v1/apps/{app}/metadata", s.handlePutMetadata)
+	mux.HandleFunc("PUT /api/v1/apps/{app}/icon", s.handlePutIcon)
+
 	// Upload page.
 	mux.HandleFunc("GET /upload", s.handleUploadPage)
 

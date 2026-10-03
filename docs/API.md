@@ -308,6 +308,117 @@ curl -fS -X POST \
 
 ---
 
+## 应用元数据
+
+应用级信息（名称、描述、图标等）存在 `apps/{app}/app.json`，对所有版本生效。
+这三个接口让管理员不必手工编辑文件，网页端 <http://localhost:8080/upload>
+的「应用信息」面板用的就是它们。
+
+**鉴权与上传接口相同**：由 `UPLOAD_SECRET` 推导的应用令牌，
+放在 `Authorization: Bearer <令牌>` 或 `X-Upload-Token: <令牌>` 里。
+站点未配置 `UPLOAD_SECRET` 时，这三个接口统一返回 `403`。
+
+### `GET /api/v1/apps/{app}/metadata`
+
+返回**原样的 `app.json`**，而不是 `GET /api/v1/apps/{app}` 那种合并视图 ——
+后者会把从安装包推断出的 `platforms` 一并返回，存回去等于把推断结果固化。
+
+文件不存在时返回 `200` 和一个空的 `metadata` 对象，便于表单直接渲染。
+
+```json
+{
+  "app": "mti-sip-phone",
+  "metadata": {
+    "id": "mti-sip-phone",
+    "name": "mti-sip-phone 软电话",
+    "summary": "跨平台 SIP 软电话",
+    "vendor": "MTI",
+    "license": "Proprietary",
+    "tags": ["sip", "softphone"],
+    "channel": "stable",
+    "icon": "icon.svg",
+    "order": 10,
+    "hidden": false
+  },
+  "icon": {"file": "icon.svg", "url": "https://…/a/mti-sip-phone/icon"},
+  "iconUrl": "https://…/a/mti-sip-phone/icon"
+}
+```
+
+### `PUT /api/v1/apps/{app}/metadata`
+
+请求体是 `application/json`，字段与 `app.json` 一致。**整体替换**，不是增量合并：
+没写的字段会被清空。`id` 会被忽略，目录名始终优先。
+
+```bash
+curl -fS -X PUT \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+        "name": "mti-sip-phone 软电话",
+        "summary": "跨平台 SIP 软电话",
+        "vendor": "MTI",
+        "license": "Proprietary",
+        "homepage": "https://example.com/products/sip-phone",
+        "tags": ["sip", "softphone", "voip"],
+        "channel": "stable",
+        "order": 10
+      }' \
+  https://update.example.com/api/v1/apps/mti-sip-phone/metadata
+```
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `name` | string | 显示名称，最长 300 字符 |
+| `summary` | string | 一句话描述，最长 300 |
+| `description` | string | 详细描述，Markdown，最长 20000 |
+| `homepage` | string | 必须 http(s)，最长 300 |
+| `vendor` | string | 厂商，最长 300 |
+| `license` | string | 许可证，最长 300 |
+| `channel` | string | 默认通道，最长 300 |
+| `tags` | string[] | 最多 30 个，单个最长 60 字符 |
+| `platforms` | string[] | 最多 20 个。留空则站点从安装包自动推断 |
+| `icon` | string | 图标文件名。由图标接口维护，手工设置需谨慎 |
+| `order` | number \| null | 列表排序，小的靠前，默认 100 |
+| `hidden` | bool | 为 `true` 时不在应用列表中展示，但下载地址仍然有效 |
+
+成功返回 `200` 和保存后的内容（结构与 `GET` 相同），并触发一次重新扫描。
+未知字段会被拒绝（`400 invalid_json`），避免拼错字段静默丢数据。
+
+| 状态码 | 含义 |
+| --- | --- |
+| `200` | 已保存 |
+| `400` | JSON 非法、含未知字段，或字段超限（`save_failed`） |
+| `401` | 令牌缺失或错误 |
+| `403` | 站点未开启上传功能 |
+| `503` | 归档目录不可写 |
+
+### `PUT /api/v1/apps/{app}/icon`
+
+请求体是图标二进制本身，`Content-Type` 可省略（站点按内容判断）。
+
+```bash
+curl -fS -X PUT \
+  -H "Authorization: Bearer $TOKEN" \
+  --data-binary @icon.png \
+  https://update.example.com/api/v1/apps/mti-sip-phone/icon
+```
+
+- 接受 PNG、JPEG、SVG、WebP，最大 2 MB
+- **类型由文件内容判定，不看扩展名**；保存的文件名也由内容决定
+  （`icon.png` / `icon.jpg` / `icon.svg` / `icon.webp`），
+  调用方无法指定路径或扩展名
+- 写入后同目录下其他已知图标名（`icon.*`、`logo.*`）会被删除，保证只有一个
+- 同时把 `app.json` 的 `icon` 字段指向新文件，避免之前配置过的自定义图标名继续生效
+- 返回体与 `GET metadata` 相同，`message` 里带上新的文件名
+
+`400` 表示不是可识别的图片（或伪装成 SVG 的 HTML），`413` 表示超过大小上限。
+
+> 图标以 `image/svg+xml` 提供时会带上 `Content-Security-Policy` 与
+> `X-Content-Type-Options: nosniff`，SVG 里的脚本不会在本站源下执行。
+
+---
+
 ## `GET /dl/{app}/{version}/{file}`
 
 下载产物。`{version}` 可以是 `latest`。`{file}` 支持相对路径，
