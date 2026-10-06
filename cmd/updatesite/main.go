@@ -26,6 +26,7 @@ import (
 
 	"github.com/wuzhengmao/updatesite/internal/buildinfo"
 	"github.com/wuzhengmao/updatesite/internal/config"
+	"github.com/wuzhengmao/updatesite/internal/downloads"
 	"github.com/wuzhengmao/updatesite/internal/index"
 	"github.com/wuzhengmao/updatesite/internal/server"
 	"github.com/wuzhengmao/updatesite/internal/token"
@@ -81,7 +82,8 @@ func serve() {
 	cfg := config.Load()
 
 	idx := index.New(cfg.DataDir, cfg.CacheDir)
-	srv, err := server.New(cfg, idx)
+	dl := downloads.New(cfg.DataDir)
+	srv, err := server.New(cfg, idx, dl)
 	if err != nil {
 		log.Fatalf("cannot start: %v", err)
 	}
@@ -90,6 +92,7 @@ func serve() {
 	defer stop()
 
 	go idx.Run(ctx, cfg.ScanInterval)
+	go dl.Run(ctx, downloads.FlushInterval)
 	go watchHup(ctx, idx)
 
 	// Settle whether HTTPS can run *before* wiring the HTTP handler: a
@@ -119,6 +122,7 @@ func serve() {
 	listen(httpSrv, false)
 	log.Printf("listening on %s (data %s, cache %s, rescan every %s, upload %v)",
 		cfg.Addr, cfg.DataDir, cfg.CacheDir, cfg.ScanInterval, cfg.UploadEnabled)
+	log.Printf("download counts are kept in %s", dl.Path())
 	// Say where absolute URLs come from. A BASE_URL left over from a local test
 	// is otherwise invisible until someone notices the links are wrong.
 	if cfg.BaseURL != "" {
@@ -148,6 +152,8 @@ func serve() {
 			log.Printf("graceful shutdown of %s failed: %v", s.Addr, err)
 		}
 	}
+	// After the drain: a request that was already in flight may have counted.
+	dl.Save()
 	log.Printf("stopped (version %s, commit %s)", buildinfo.Version, buildinfo.Commit)
 }
 

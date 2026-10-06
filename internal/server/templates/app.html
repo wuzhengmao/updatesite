@@ -14,6 +14,7 @@
       {{if .App.License}}<span>{{.App.License}}</span>{{end}}
       {{range .App.Tags}}<span class="chip chip-sm">{{.}}</span>{{end}}
       {{if .App.Homepage}}<a class="chip chip-sm" href="{{.App.Homepage}}" rel="noopener noreferrer">官网</a>{{end}}
+      <span class="muted">累计下载 {{appDownloads .App.ID}} 次</span>
       <span class="muted">最近更新 {{ago .App.UpdatedAt}}</span>
     </div>
   </div>
@@ -35,6 +36,7 @@
       <span class="badge">{{.Release.Channel}}</span>
       {{if .Release.Prerelease}}<span class="badge badge-warn">预发布</span>{{end}}
       {{if .Release.Mandatory}}<span class="badge badge-danger">强制更新</span>{{end}}
+      <span class="badge">累计下载 {{versionDownloads .App.ID .Release.Version}}</span>
       <span class="badge">{{date .Release.PublishedAt}}</span>
     </div>
   </header>
@@ -42,7 +44,7 @@
   <div class="table-scroll">
   <table class="files">
     <thead>
-      <tr><th>平台</th><th>类型</th><th>文件</th><th class="num">大小</th><th>SHA-256</th><th></th></tr>
+      <tr><th>平台</th><th>类型</th><th>文件</th><th class="num">大小</th><th class="num">下载</th><th>SHA-256</th><th></th></tr>
     </thead>
     <tbody>
       {{range .Release.Artifacts}}
@@ -57,6 +59,7 @@
           {{if not .Detected}}<span class="tag">已声明</span>{{end}}
         </td>
         <td class="num nowrap">{{size .Size}}</td>
+        <td class="num nowrap">{{downloads $.App.ID $.Release.Version .File}}</td>
         <td class="sha">
           {{if .SHA256}}<code class="copy" data-copy="{{.SHA256}}" title="{{.SHA256}}">{{shortsha .SHA256}}…</code>
           {{else}}<span class="muted">未计算</span>{{end}}
@@ -67,7 +70,7 @@
         </td>
       </tr>
       {{else}}
-      <tr><td colspan="6" class="muted">这个版本没有可下载的文件。</td></tr>
+      <tr><td colspan="7" class="muted">这个版本没有可下载的文件。</td></tr>
       {{end}}
     </tbody>
   </table>

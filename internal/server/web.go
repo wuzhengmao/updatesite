@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/wuzhengmao/updatesite/internal/downloads"
 	"github.com/wuzhengmao/updatesite/internal/index"
 )
 
@@ -30,19 +31,24 @@ type pageData struct {
 	ErrorText string
 }
 
-func templateFuncs() template.FuncMap {
+// templateFuncs exposes the download counter to the templates, so a page can
+// ask for the number of the artifact or version it is rendering right now.
+func templateFuncs(dl *downloads.Store) template.FuncMap {
 	return template.FuncMap{
-		"md":        RenderMarkdown,
-		"size":      humanSize,
-		"date":      func(t time.Time) string { return t.Format("2006-01-02") },
-		"datetime":  func(t time.Time) string { return t.Format("2006-01-02 15:04") },
-		"ago":       humanAgo,
-		"shortsha":  shortSHA,
-		"osLabel":   osLabel,
-		"archLabel": archLabel,
-		"kindLabel": kindLabel,
-		"lower":     strings.ToLower,
-		"initial":   initial,
+		"downloads":        dl.FileCount,
+		"versionDownloads": dl.VersionCount,
+		"appDownloads":     dl.AppCount,
+		"md":               RenderMarkdown,
+		"size":             humanSize,
+		"date":             func(t time.Time) string { return t.Format("2006-01-02") },
+		"datetime":         func(t time.Time) string { return t.Format("2006-01-02 15:04") },
+		"ago":              humanAgo,
+		"shortsha":         shortSHA,
+		"osLabel":          osLabel,
+		"archLabel":        archLabel,
+		"kindLabel":        kindLabel,
+		"lower":            strings.ToLower,
+		"initial":          initial,
 	}
 }
 

@@ -39,12 +39,23 @@
     "snapshotBuiltAt": "2026-10-03T10:02:20+08:00",
     "appsDir": "/data/apps",
     "warnings": []
+  },
+  "downloads": {
+    "total": 128,
+    "apps": 2,
+    "files": 7,
+    "writable": true
   }
 }
 ```
 
 `index.warnings` 会列出扫描时跳过或忽略的条目，例如版本号不合法的目录、
 JSON 写错的 `release.json`。归档目录没生效时先看这里。
+
+`downloads` 是下载计数器（计数规则见文末「下载接口」一节）：
+`total` 是累计下载次数，`apps` / `files` 是有过下载的应用数与文件条目数。
+`writable: false` 表示计数器写不进磁盘（归档目录只读），数字只留在内存里，
+进程重启即清零。
 
 ---
 
@@ -66,6 +77,7 @@ JSON 写错的 `release.json`。归档目录没生效时先看这里。
       "iconUrl": "https://update.example.com/a/demo-desktop/icon",
       "latest": {"stable": "1.2.0"},
       "releaseCount": 2,
+      "downloads": 128,
       "updatedAt": "2026-09-20T09:30:00+08:00",
       "pageUrl": "https://update.example.com/a/demo-desktop",
       "apiUrl": "https://update.example.com/api/v1/apps/demo-desktop"
@@ -75,6 +87,7 @@ JSON 写错的 `release.json`。归档目录没生效时先看这里。
 ```
 
 `latest` 是「通道 → 最新版本号」的映射，客户端只需要一个字段时用它。
+`downloads` 是该应用所有版本的下载次数之和。
 
 ---
 
@@ -125,6 +138,7 @@ JSON 写错的 `release.json`。归档目录没生效时先看这里。
     "kind": "installer",
     "size": 39,
     "sha256": "e0e306249cc37258636bd6793125bb5fb9b549f4dcfcf53535a566cda9e8bb7f",
+    "downloads": 96,
     "url": "https://update.example.com/dl/demo-desktop/1.2.0/DemoDesktop-1.2.0-windows-x64.exe",
     "path": "/dl/demo-desktop/1.2.0/DemoDesktop-1.2.0-windows-x64.exe",
     "available": true
@@ -157,6 +171,7 @@ JSON 写错的 `release.json`。归档目录没生效时先看这里。
   "mandatory": true,
   "minVersion": "1.0.0",
   "pageUrl": "https://update.example.com/a/demo-desktop/1.2.0",
+  "downloads": 121,
   "artifacts": [
     {
       "file": "DemoDesktop-1.2.0-windows-x64.exe",
@@ -166,6 +181,7 @@ JSON 写错的 `release.json`。归档目录没生效时先看这里。
       "kind": "installer",
       "size": 39,
       "sha256": "e0e3…bb7f",
+      "downloads": 96,
       "url": "https://…/dl/demo-desktop/1.2.0/DemoDesktop-1.2.0-windows-x64.exe",
       "path": "/dl/demo-desktop/1.2.0/DemoDesktop-1.2.0-windows-x64.exe",
       "available": true,
@@ -178,6 +194,8 @@ JSON 写错的 `release.json`。归档目录没生效时先看这里。
 
 - `detected: true` 表示平台/架构是从文件名推断的，`false` 表示由 `release.json` 明确声明
 - `notes` 是原始 Markdown 文本
+- `downloads` 在产物上是该文件的次数，在版本上是该版本全部产物之和，
+  在应用上是全部版本之和，三级自动汇总
 
 ---
 
@@ -495,3 +513,20 @@ curl -fS -X DELETE \
 | `Accept-Ranges` | 支持断点续传与分块下载 |
 
 产物配置了外部 `url` 且本地无文件时，返回 `302` 跳转到该地址。
+
+### 下载计数
+
+每一次**真正从本站传输文件**的请求都会计数，按「应用 / 版本 / 文件」记录，
+并向上汇总。计数写在 `DATA_DIR/downloads.json`，删掉即从零开始。
+
+判定规则：
+
+- 只统计 `GET`；`HEAD` 不计（两者走同一个处理函数）
+- 命中 `If-None-Match` / `If-Modified-Since` 而被答复 `304` 的请求不计
+- 断点续传（`Range`）每段各记一次 —— 统计的是**下载请求次数**，
+  不是「下载完成次数」，也不按字节数加权
+- 外部链接的 `302` 跳转不计：站点无法观测远端文件是否真的被取走
+- 版本号按解析后的具体版本记账，所以 `latest` 与 `v1.2.0` 都计入 `1.2.0`
+- 文件名按归档里的规范路径记账，所以大小写不同或只写文件名的请求归到一起
+- 删除应用或版本不会抹掉历史计数；计数器文件因此是**归档历史累计**，
+  可能大于当前列出文件的下载之和

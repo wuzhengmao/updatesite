@@ -8,6 +8,7 @@
 - **应用信息可在线维护** —— 名称、描述、标签、图标都能在网页上改，不必手工编辑 JSON
 - **多产品多平台** —— 每个应用独立 ID，每个版本按 `os` / `arch` 归档安装包
 - **REST API** —— 客户端传当前版本号即可查询是否有新版本、下载哪个包
+- **下载计数** —— 每个安装包、每个版本、每个应用各被下载多少次，网页与 API 都能看
 - **内置文档** —— 发布规范、上传说明、API 文档随二进制一起分发，浏览 `/docs` 即可查看
 - **单二进制** —— Go 标准库实现，零第三方依赖，静态编译
 - **多架构镜像** —— `linux/amd64` 与 `linux/arm64`，基于 `scratch`，镜像约 13 MB
@@ -72,7 +73,7 @@ VERSION=0.3.0-rc1 docker compose up -d --build
 任何仓库文件。以下全程只用 `docker`，不需要 `git clone`。
 
 下面用 `latest` 是为了让示例不会过期；生产环境建议换成固定版本号
-（如 `wuzm219/updatesite:0.2.1`），或者干脆用 digest，见文末「推送到 Docker Hub」。
+（如 `wuzm219/updatesite:0.2.2`），或者干脆用 digest，见文末「推送到 Docker Hub」。
 
 **1. 建目录，从镜像里生成部署密钥**
 
@@ -108,15 +109,20 @@ services:
       TLS_KEY: "/certs/server.key"
       TLS_REDIRECT: "true"
     volumes:
+      - updatesite-data:/data
       - ./apps:/data/apps
       - ./certs:/certs:ro
       - updatesite-cache:/var/cache/updatesite
 volumes:
+  updatesite-data:
   updatesite-cache:
 ```
 
 `apps` 就是归档目录，发布的东西都在里面，换机器拷走即可。
 `updatesite-cache` 只是个命名卷，存 sha256 缓存，删了会重算。
+`updatesite-data` 存下载计数（`/data/downloads.json`）——**别省掉它**：
+只挂 `./apps:/data/apps` 的话，`/data` 落在容器可写层，容器一重建
+（升级、`--force-recreate`、`down`）计数就归零，删掉这个卷也只影响统计。
 
 **3. 起服务**
 
@@ -166,6 +172,7 @@ docker run -d --name updatesite --restart unless-stopped \
   -e UPLOAD_SECRET="$(docker run --rm wuzm219/updatesite:latest token -gen-secret -q)" \
   -e TZ=Asia/Shanghai \
   -e TLS_CERT=/certs/server.crt -e TLS_KEY=/certs/server.key -e TLS_REDIRECT=true \
+  -v updatesite-data:/data \
   -v "$PWD/apps:/data/apps" -v "$PWD/certs:/certs:ro" \
   -v updatesite-cache:/var/cache/updatesite \
   wuzm219/updatesite:latest
@@ -206,6 +213,11 @@ volumes:
 **必须可写**，否则上传功能会失败（返回 `503` 并提示
 `is the archive mounted read-write?`）。只手工拷贝发布、不需要上传时，
 可以加 `:ro` 收紧权限。
+
+归档目录的**同级**还有一个 `downloads.json`，是站点自己写的下载计数。
+它不属于发布规范，发布方不用管；跟归档一起备份，删了只是统计从零开始。
+整个 `DATA_DIR` 都不可写时，站点会退化成只在内存里计数（重启清零），
+并在日志与 `/api/v1/health` 的 `downloads.writable` 里说明，不影响下载本身。
 
 ---
 
@@ -485,7 +497,7 @@ docker manifest inspect wuzm219/updatesite:<版本号>   # 确认两个架构都
 显示在站点页脚和 `/api/v1/health` 里：
 
 ```
-0.2.1+a1b2c3d · 2026-10-03 13:32 +08:00
+0.2.2+a1b2c3d · 2026-10-03 13:32 +08:00
 ```
 
 构建时间来自 `BUILD_DATE`（UTC 存储，便于比较）。没传时回落到二进制自身的
@@ -519,6 +531,7 @@ docker manifest inspect wuzm219/updatesite:<版本号>   # 确认两个架构都
 | **`scratch` 基础镜像** | 镜像约 13 MB，容器里没有 shell、包管理器和 libc，攻击面最小。健康检查由二进制自身的 `-healthcheck` 参数完成 |
 | **单次交叉编译代替 QEMU** | `--platform=$BUILDPLATFORM` + `GOARCH=$TARGETARCH`，一次构建同时产出 amd64 和 arm64，不需要模拟 |
 | **后台扫描 + 原子快照** | 文件遍历和哈希计算在后台进行，HTTP 处理函数只读当前快照，永远不会被慢磁盘阻塞。扫描完成后整体替换，读到的数据始终自洽 |
+| **下载计数独立于快照** | 快照每 15 秒整体重建，计数放进去会被周期清零。所以计数按「应用/版本/文件」的名字存在自己的可变存储里，落盘 `DATA_DIR/downloads.json`：重扫、重传、重启都不丢，也不给只读的快照加锁 |
 | **校验和按 mtime 缓存** | 大文件只在首次出现时计算一次，结果持久化到 `CACHE_DIR`，容器重启后不重算 |
 | **上传密钥由部署方提供** | 令牌是 `(密钥, 应用ID)` 的纯函数，各环境配同一密钥时令牌通用；密钥不写进源码，公开仓库不等于公开签发能力 |
 | **Markdown 子集自研渲染** | 避免引入依赖。渲染前先整体 HTML 转义，链接做协议白名单校验，代码块用占位符隔离，从构造上杜绝 XSS |
@@ -532,6 +545,7 @@ internal/config/       环境变量配置
 internal/semver/       宽松语义化版本解析与比较
 internal/index/        归档扫描、平台识别、校验和缓存、快照发布
 internal/appmeta/      app.json 与图标的读写
+internal/downloads/    下载计数：按文件计数，向上汇总，落盘 downloads.json
 internal/token/        由部署密钥与应用 ID 推导上传令牌
 internal/upload/       压缩包解包、版本推断、原子替换
 internal/server/       HTTP 路由、JSON API、上传、下载、网页与模板

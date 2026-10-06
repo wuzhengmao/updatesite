@@ -8,6 +8,10 @@
 /data/
 /cache/
 
+# Written by the site itself: `make run` uses DATA_DIR=./examples, so the
+# download counter lands next to the demo archive.
+/examples/downloads.json
+
 # The archive mount point. It holds real releases, which are deployment
 # artefacts rather than source: installers are large and often proprietary, so
 # they stay out of the repository. Placeholder demo content lives in

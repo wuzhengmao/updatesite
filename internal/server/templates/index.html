@@ -22,7 +22,7 @@
       {{range .Platforms}}<span class="chip chip-sm">{{osLabel .}}</span>{{end}}
     </div>
     <div class="card-meta muted">
-      {{.ReleaseCount}} 个版本 · 最近更新 {{ago .UpdatedAt}}
+      {{.ReleaseCount}} 个版本 · 累计下载 {{appDownloads .ID}} 次 · 最近更新 {{ago .UpdatedAt}}
     </div>
   </a>
   {{end}}

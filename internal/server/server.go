@@ -20,6 +20,7 @@ import (
 
 	"github.com/wuzhengmao/updatesite/internal/buildinfo"
 	"github.com/wuzhengmao/updatesite/internal/config"
+	"github.com/wuzhengmao/updatesite/internal/downloads"
 	"github.com/wuzhengmao/updatesite/internal/index"
 )
 
@@ -56,16 +57,17 @@ var assetsVersion = func() string {
 type Server struct {
 	cfg     config.Config
 	idx     *index.Index
+	dl      *downloads.Store // mutable download counter, read at render time
 	tmpl    *template.Template
 	docs    []*doc
 	started time.Time
 }
 
 // New builds a server, parsing the embedded templates and rendering the
-// bundled documentation once at start up.
-func New(cfg config.Config, idx *index.Index) (*Server, error) {
-	s := &Server{cfg: cfg, idx: idx, started: time.Now()}
-	t, err := template.New("").Funcs(templateFuncs()).ParseFS(assets, "templates/*.html")
+// bundled documentation once at start up. The download counter must not be nil.
+func New(cfg config.Config, idx *index.Index, dl *downloads.Store) (*Server, error) {
+	s := &Server{cfg: cfg, idx: idx, dl: dl, started: time.Now()}
+	t, err := template.New("").Funcs(templateFuncs(dl)).ParseFS(assets, "templates/*.html")
 	if err != nil {
 		return nil, err
 	}
@@ -306,6 +308,7 @@ type siteInfo struct {
 	BaseURL       string
 	Year          int
 	Stats         index.Stats
+	Downloads     int64
 	AppsCount     int
 	UploadEnabled bool
 }
@@ -322,6 +325,7 @@ func (s *Server) site() siteInfo {
 		BaseURL:       s.cfg.BaseURL,
 		Year:          time.Now().Year(),
 		Stats:         st,
+		Downloads:     s.dl.Total(),
 		AppsCount:     len(s.idx.Current().PublicApps()),
 		UploadEnabled: s.cfg.UploadEnabled,
 	}

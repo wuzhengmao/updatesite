@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/wuzhengmao/updatesite/internal/config"
+	"github.com/wuzhengmao/updatesite/internal/downloads"
 	"github.com/wuzhengmao/updatesite/internal/index"
 	"github.com/wuzhengmao/updatesite/internal/server"
 	"github.com/wuzhengmao/updatesite/internal/token"
@@ -226,7 +227,7 @@ func TestUploadDisabled(t *testing.T) {
 	}
 	idx := index.New(cfg.DataDir, cfg.CacheDir)
 	idx.Scan()
-	srv, err := server.New(cfg, idx)
+	srv, err := server.New(cfg, idx, downloads.New(cfg.DataDir))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -561,6 +562,14 @@ func write(t *testing.T, root, rel, content string) string {
 // newSite builds a throwaway archive and returns a live test server.
 func newSite(t *testing.T) (*httptest.Server, string) {
 	t.Helper()
+	ts, dir, _ := newSiteWithStore(t)
+	return ts, dir
+}
+
+// newSiteWithStore is newSite plus the download counter, for the tests that
+// inspect or persist the counts.
+func newSiteWithStore(t *testing.T) (*httptest.Server, string, *downloads.Store) {
+	t.Helper()
 	dir := t.TempDir()
 
 	write(t, dir, "apps/demo/app.json", `{
@@ -593,6 +602,14 @@ func newSite(t *testing.T) (*httptest.Server, string) {
 	// A second app whose only release is a pre-release.
 	write(t, dir, "apps/edge/2.0.0-rc.1/edge-2.0.0-rc.1-windows-x64.exe", "rc build")
 
+	// A third app whose only artifact is hosted elsewhere: the site redirects
+	// to it and cannot tell whether the file was ever fetched.
+	write(t, dir, "apps/remote/1.0.0/release.json", `{
+		"artifacts": [
+			{"file": "Remote-1.0.0-windows-x64.exe", "url": "https://example.com/Remote-1.0.0-windows-x64.exe"}
+		]
+	}`)
+
 	// Distractors that must be ignored.
 	write(t, dir, "apps/demo/notes.txt", "not a version directory")
 	write(t, dir, "apps/demo/.hidden/1.0.0/x.exe", "hidden")
@@ -615,13 +632,18 @@ func newSite(t *testing.T) (*httptest.Server, string) {
 	t.Cleanup(cancel)
 	go idx.Run(ctx, cfg.ScanInterval)
 
-	srv, err := server.New(cfg, idx)
+	// The counter is not run on a flush loop here: a background Save racing the
+	// t.TempDir cleanup would leave files behind. Tests that need persistence
+	// call Save themselves; Run has its own tests in internal/downloads.
+	dl := downloads.New(cfg.DataDir)
+
+	srv, err := server.New(cfg, idx, dl)
 	if err != nil {
 		t.Fatal(err)
 	}
 	ts := httptest.NewServer(srv.Handler())
 	t.Cleanup(ts.Close)
-	return ts, dir
+	return ts, dir, dl
 }
 
 // getJSON fetches a path and decodes it into a generic map.
@@ -647,8 +669,8 @@ func TestListApps(t *testing.T) {
 		t.Fatalf("status = %d, want 200", code)
 	}
 	apps, _ := body["apps"].([]any)
-	if len(apps) != 2 {
-		t.Fatalf("got %d apps, want 2: %v", len(apps), body)
+	if len(apps) != 3 {
+		t.Fatalf("got %d apps, want 3: %v", len(apps), body)
 	}
 	first := apps[0].(map[string]any)
 	if first["id"] != "demo" {
@@ -842,6 +864,225 @@ func TestDownloadNotFound(t *testing.T) {
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusNotFound {
 		t.Errorf("status = %d, want 404", resp.StatusCode)
+	}
+}
+
+// fetch performs a GET and returns the status with the body drained, so the
+// server sees a complete download.
+func fetch(t *testing.T, ts *httptest.Server, path string, header http.Header) *http.Response {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodGet, ts.URL+path, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for k, vs := range header {
+		for _, v := range vs {
+			req.Header.Add(k, v)
+		}
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	io.Copy(io.Discard, resp.Body)
+	resp.Body.Close()
+	return resp
+}
+
+// apiDownloads reads the downloads field of an app object.
+func apiDownloads(t *testing.T, ts *httptest.Server, app string) int64 {
+	t.Helper()
+	code, body := getJSON(t, ts, "/api/v1/apps/"+app)
+	if code != http.StatusOK {
+		t.Fatalf("GET /api/v1/apps/%s: status %d", app, code)
+	}
+	n, ok := body["downloads"].(float64)
+	if !ok {
+		t.Fatalf("app object has no downloads field: %v", body)
+	}
+	return int64(n)
+}
+
+func TestDownloadCounts(t *testing.T) {
+	ts, _, dl := newSiteWithStore(t)
+	const exe = "Demo-1.2.0-windows-x64.exe"
+
+	// The same file twice, plus the two other spellings of the same version:
+	// "latest" and a "v" prefix must fold into the concrete release.
+	fetch(t, ts, "/dl/demo/1.2.0/"+exe, nil)
+	fetch(t, ts, "/dl/demo/latest/"+exe, nil)
+	fetch(t, ts, "/dl/demo/v1.2.0/"+exe, nil)
+	fetch(t, ts, "/dl/demo/1.2.0/Demo-1.2.0-macos-universal.dmg", nil)
+
+	if got := dl.FileCount("demo", "1.2.0", exe); got != 3 {
+		t.Errorf("file count = %d, want 3", got)
+	}
+	if got := dl.VersionCount("demo", "1.2.0"); got != 4 {
+		t.Errorf("version count = %d, want 4", got)
+	}
+	if got := dl.AppCount("demo"); got != 4 {
+		t.Errorf("app count = %d, want 4", got)
+	}
+	if got := dl.VersionCount("demo", "1.0.0"); got != 0 {
+		t.Errorf("the untouched version = %d, want 0", got)
+	}
+
+	// The numbers reach the API, at every level.
+	code, body := getJSON(t, ts, "/api/v1/apps/demo?releases=1")
+	if code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", code)
+	}
+	if got, _ := body["downloads"].(float64); int64(got) != 4 {
+		t.Errorf("app downloads = %v, want 4", body["downloads"])
+	}
+	releases, _ := body["releases"].([]any)
+	if len(releases) == 0 {
+		t.Fatal("the app object carries no releases")
+	}
+	first, _ := releases[0].(map[string]any)
+	if got, _ := first["downloads"].(float64); int64(got) != 4 {
+		t.Errorf("release downloads = %v, want 4", first["downloads"])
+	}
+	found := false
+	for _, a := range first["artifacts"].([]any) {
+		art, _ := a.(map[string]any)
+		if art["file"] == exe {
+			found = true
+			if got, _ := art["downloads"].(float64); int64(got) != 3 {
+				t.Errorf("artifact downloads = %v, want 3", art["downloads"])
+			}
+		}
+	}
+	if !found {
+		t.Errorf("artifact %s is missing from the release", exe)
+	}
+
+	// A rescan replaces the catalogue; the counter is keyed by name and stays.
+	if resp, err := http.Post(ts.URL+"/api/v1/rescan", "", nil); err != nil {
+		t.Fatal(err)
+	} else {
+		resp.Body.Close()
+	}
+	if got := apiDownloads(t, ts, "demo"); got != 4 {
+		t.Errorf("downloads after a rescan = %d, want 4", got)
+	}
+}
+
+func TestDownloadCountsIgnoreHeadAndNotModified(t *testing.T) {
+	ts, _, dl := newSiteWithStore(t)
+	const path = "/dl/demo/1.2.0/Demo-1.2.0-windows-x64.exe"
+
+	resp := fetch(t, ts, path, nil)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	etag := resp.Header.Get("ETag")
+	if etag == "" {
+		t.Fatal("the artifact has no ETag to revalidate against")
+	}
+
+	// HEAD is routed to the same handler but transfers nothing.
+	head, err := http.NewRequest(http.MethodHead, ts.URL+path, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	headResp, err := http.DefaultClient.Do(head)
+	if err != nil {
+		t.Fatal(err)
+	}
+	headResp.Body.Close()
+
+	// A conditional request answered with 304 is a revalidation, not a download.
+	if got := fetch(t, ts, path, http.Header{"If-None-Match": {etag}}).StatusCode; got != http.StatusNotModified {
+		t.Fatalf("revalidation status = %d, want 304", got)
+	}
+	if got := fetch(t, ts, path, http.Header{"If-Modified-Since": {"Mon, 02 Jan 2030 15:04:05 GMT"}}).StatusCode; got != http.StatusNotModified {
+		t.Fatalf("If-Modified-Since status = %d, want 304", got)
+	}
+
+	if got := dl.FileCount("demo", "1.2.0", "Demo-1.2.0-windows-x64.exe"); got != 1 {
+		t.Errorf("file count = %d, want 1: HEAD and revalidations are not downloads", got)
+	}
+}
+
+func TestDownloadCountsIgnoreExternal(t *testing.T) {
+	ts, _, dl := newSiteWithStore(t)
+	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	}}
+	resp, err := client.Get(ts.URL + "/dl/remote/1.0.0/Remote-1.0.0-windows-x64.exe")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusFound {
+		t.Fatalf("status = %d, want 302", resp.StatusCode)
+	}
+	if got := dl.AppCount("remote"); got != 0 {
+		t.Errorf("external redirects counted %d downloads, want 0", got)
+	}
+}
+
+func TestDownloadCountsPersist(t *testing.T) {
+	ts, dir, dl := newSiteWithStore(t)
+	fetch(t, ts, "/dl/demo/1.2.0/Demo-1.2.0-windows-x64.exe", nil)
+	dl.Save()
+
+	reloaded := downloads.New(dir)
+	if got := reloaded.FileCount("demo", "1.2.0", "Demo-1.2.0-windows-x64.exe"); got != 1 {
+		t.Errorf("file count after a reload = %d, want 1", got)
+	}
+	if got := reloaded.Total(); got != 1 {
+		t.Errorf("total after a reload = %d, want 1", got)
+	}
+}
+
+func TestDownloadCountsRendered(t *testing.T) {
+	ts, _, _ := newSiteWithStore(t)
+	for i := 0; i < 2; i++ {
+		fetch(t, ts, "/dl/demo/1.2.0/Demo-1.2.0-windows-x64.exe", nil)
+	}
+
+	code, html := getHTML(t, ts, "/")
+	if code != http.StatusOK {
+		t.Fatalf("index status = %d", code)
+	}
+	if !strings.Contains(html, "2 个版本 · 累计下载 2 次 · 最近更新") {
+		t.Error("the index card does not show the download count")
+	}
+
+	code, html = getHTML(t, ts, "/a/demo")
+	if code != http.StatusOK {
+		t.Fatalf("app page status = %d", code)
+	}
+	for _, want := range []string{
+		`<th class="num">下载</th>`,
+		"累计下载 2 次",
+		"个文件 · 累计下载 2 次",
+	} {
+		if !strings.Contains(html, want) {
+			t.Errorf("the app page does not contain %q", want)
+		}
+	}
+}
+
+func TestHealthReportsDownloads(t *testing.T) {
+	ts, _, _ := newSiteWithStore(t)
+	fetch(t, ts, "/dl/demo/1.2.0/Demo-1.2.0-windows-x64.exe", nil)
+
+	code, body := getJSON(t, ts, "/api/v1/health")
+	if code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", code)
+	}
+	stats, ok := body["downloads"].(map[string]any)
+	if !ok {
+		t.Fatalf("health has no downloads object: %v", body)
+	}
+	if got, _ := stats["total"].(float64); int64(got) != 1 {
+		t.Errorf("total = %v, want 1", stats["total"])
+	}
+	if stats["writable"] != true {
+		t.Errorf("writable = %v, want true", stats["writable"])
 	}
 }
 

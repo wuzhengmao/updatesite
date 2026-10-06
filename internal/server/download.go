@@ -102,6 +102,14 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Count only a GET that is about to move bytes. HEAD is routed here too
+	// (the mux maps it onto the GET pattern), and a conditional request that
+	// reaches this point is answered with a 304 by ServeContent, so neither is
+	// a download. The If-None-Match case already returned above.
+	if r.Method == http.MethodGet && r.Header.Get("If-Modified-Since") == "" {
+		s.dl.Count(app.ID, rel.Version, art.File)
+	}
+
 	// ServeContent adds Range, If-Range and If-Modified-Since handling.
 	http.ServeContent(w, r, filename, st.ModTime(), f)
 }

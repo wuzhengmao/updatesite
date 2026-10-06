@@ -21,6 +21,7 @@ type artifactDTO struct {
 	Kind      string    `json:"kind,omitempty"`
 	Size      int64     `json:"size"`
 	SHA256    string    `json:"sha256,omitempty"`
+	Downloads int64     `json:"downloads"`
 	URL       string    `json:"url"`
 	Path      string    `json:"path,omitempty"`
 	Available bool      `json:"available"`
@@ -39,6 +40,7 @@ type releaseDTO struct {
 	Mandatory   bool          `json:"mandatory"`
 	MinVersion  string        `json:"minVersion,omitempty"`
 	Artifacts   []artifactDTO `json:"artifacts"`
+	Downloads   int64         `json:"downloads"`
 	PageURL     string        `json:"pageUrl"`
 }
 
@@ -57,6 +59,7 @@ type appDTO struct {
 	IconURL      string            `json:"iconUrl,omitempty"`
 	Latest       map[string]string `json:"latest"`
 	ReleaseCount int               `json:"releaseCount"`
+	Downloads    int64             `json:"downloads"`
 	UpdatedAt    time.Time         `json:"updatedAt"`
 	PageURL      string            `json:"pageUrl"`
 	APIURL       string            `json:"apiUrl"`
@@ -99,11 +102,12 @@ type checkResponse struct {
 
 // ------------------------------------------------------------------ builders
 
-func (s *Server) artifactDTO(r *http.Request, a *index.Artifact) artifactDTO {
+func (s *Server) artifactDTO(r *http.Request, appID, version string, a *index.Artifact) artifactDTO {
 	dto := artifactDTO{
 		File: a.File, Name: a.Name, OS: a.OS, Arch: a.Arch, Kind: a.Kind,
 		Size: a.Size, SHA256: a.SHA256, Path: a.Path,
 		Available: a.Available, Detected: a.Detected, Modified: a.Modified,
+		Downloads: s.dl.FileCount(appID, version, a.File),
 	}
 	if a.Path != "" {
 		dto.URL = s.absoluteURL(r, a.Path)
@@ -113,10 +117,10 @@ func (s *Server) artifactDTO(r *http.Request, a *index.Artifact) artifactDTO {
 	return dto
 }
 
-func (s *Server) artifactDTOs(r *http.Request, arts []*index.Artifact) []artifactDTO {
+func (s *Server) artifactDTOs(r *http.Request, appID, version string, arts []*index.Artifact) []artifactDTO {
 	out := make([]artifactDTO, 0, len(arts))
 	for _, a := range arts {
-		out = append(out, s.artifactDTO(r, a))
+		out = append(out, s.artifactDTO(r, appID, version, a))
 	}
 	return out
 }
@@ -126,7 +130,8 @@ func (s *Server) releaseDTO(r *http.Request, app *index.App, rel *index.Release)
 		App: app.ID, Version: rel.Version, Channel: rel.Channel,
 		Title: rel.Title, Notes: rel.Notes, PublishedAt: rel.PublishedAt,
 		Prerelease: rel.Prerelease, Mandatory: rel.Mandatory, MinVersion: rel.MinVersion,
-		Artifacts: s.artifactDTOs(r, rel.Artifacts),
+		Artifacts: s.artifactDTOs(r, app.ID, rel.Version, rel.Artifacts),
+		Downloads: s.dl.VersionCount(app.ID, rel.Version),
 		PageURL:   s.absoluteURL(r, "/a/"+app.ID+"/"+rel.Version),
 	}
 }
@@ -137,6 +142,7 @@ func (s *Server) appDTO(r *http.Request, app *index.App, withReleases bool) appD
 		Homepage: app.Homepage, Vendor: app.Vendor, License: app.License,
 		Tags: app.Tags, Platforms: app.Platforms, Channel: app.Channel,
 		Channels: app.Channels(), Latest: app.Latest, ReleaseCount: app.ReleaseCount,
+		Downloads: s.dl.AppCount(app.ID),
 		UpdatedAt: app.UpdatedAt,
 		PageURL:   s.absoluteURL(r, "/a/"+app.ID),
 		APIURL:    s.absoluteURL(r, "/api/v1/apps/"+app.ID),
@@ -155,12 +161,12 @@ func (s *Server) appDTO(r *http.Request, app *index.App, withReleases bool) appD
 
 // bestArtifact resolves the artifact matching an os/arch pair and returns its
 // DTO, or nil when the release ships nothing for that platform.
-func (s *Server) bestArtifact(r *http.Request, rel *index.Release, osName, arch string) *artifactDTO {
+func (s *Server) bestArtifact(r *http.Request, appID string, rel *index.Release, osName, arch string) *artifactDTO {
 	best := rel.Best(osName, arch)
 	if best == nil {
 		return nil
 	}
-	dto := s.artifactDTO(r, best)
+	dto := s.artifactDTO(r, appID, rel.Version, best)
 	return &dto
 }
 
@@ -175,6 +181,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		"time":          time.Now().UTC(),
 		"uptimeSeconds": int(time.Since(s.started).Seconds()),
 		"index":         s.idx.Stats(),
+		"downloads":     s.dl.Stats(),
 	})
 }
 
@@ -254,9 +261,9 @@ func (s *Server) handleLatest(w http.ResponseWriter, r *http.Request) {
 	dto := s.releaseDTO(r, app, rel)
 	out := latestResponse{App: app.ID, Channel: rel.Channel, Release: &dto}
 	if osName != "" || arch != "" {
-		out.Match = &matchInfo{OS: osName, Arch: arch, Artifacts: s.artifactDTOs(r, rel.Filter(osName, arch))}
+		out.Match = &matchInfo{OS: osName, Arch: arch, Artifacts: s.artifactDTOs(r, app.ID, rel.Version, rel.Filter(osName, arch))}
 	}
-	out.Download = s.bestArtifact(r, rel, osName, arch)
+	out.Download = s.bestArtifact(r, app.ID, rel, osName, arch)
 	s.writeJSON(w, r, http.StatusOK, out)
 }
 
@@ -298,8 +305,8 @@ func (s *Server) handleCheck(w http.ResponseWriter, r *http.Request) {
 	resp.Mandatory = rel.Mandatory
 	published := rel.PublishedAt
 	resp.PublishedAt = &published
-	resp.Artifacts = s.artifactDTOs(r, rel.Filter(osName, arch))
-	resp.Download = s.bestArtifact(r, rel, osName, arch)
+	resp.Artifacts = s.artifactDTOs(r, app.ID, rel.Version, rel.Filter(osName, arch))
+	resp.Download = s.bestArtifact(r, app.ID, rel, osName, arch)
 	s.writeJSON(w, r, http.StatusOK, resp)
 }
 
